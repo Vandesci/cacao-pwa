@@ -1,4 +1,4 @@
-const CACHE = 'cacao-pwa-v1';
+const CACHE = 'cacao-pwa-v3';
 const BASE  = '/cacao-pwa';
 
 const PRECACHE = [
