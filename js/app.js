@@ -1107,9 +1107,8 @@ async function checkAnomalies() {
 
 // ── API HELPER ────────────────────────────────────────────────
 async function apiFetch(endpoint, method = 'GET', body = null) {
-  // Utilise le chemin direct dans l'URL - évite la traduction automatique du navigateur
-  const path    = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
-  const baseUrl = BASE + '/api' + path;
+  const path    = endpoint.replace(/^\//, '');
+  const baseUrl = BASE + '/api/index.php?_path=' + path;
   const opts    = {
     method,
     headers: { 'Content-Type': 'application/json' },
