@@ -2,6 +2,9 @@
 // ============================================================
 // ROUTER PRINCIPAL - Compatible Railway + Laragon
 // ============================================================
+// Empêcher la traduction automatique du navigateur
+header('Content-Language: fr');
+header('X-Content-Language: fr');
 
 $uri      = $_SERVER['REQUEST_URI'] ?? '/';
 $urlPath  = trim(parse_url($uri, PHP_URL_PATH), '/');
@@ -20,8 +23,13 @@ $local = trim($local, '/');
 
 // ── API ────────────────────────────────────────────────────
 if ($local === 'api' || strpos($local, 'api/') === 0) {
-    $apiPath = trim(substr($local, 3), '/');
+    // Extraire le chemin après api/
+    $apiPath = '';
+    if (strpos($local, 'api/') === 0) {
+        $apiPath = trim(substr($local, 4), '/');
+    }
     $_GET['_path'] = $apiPath;
+    $_SERVER['PATH_INFO'] = '/' . $apiPath;
     include __DIR__ . '/api/index.php';
     exit;
 }
