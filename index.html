@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#2D5016">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cacao App">
+<title>Cacao Data Collector</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-96.png">
+<link rel="apple-touch-icon" href="icons/icon-152.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --g900:#1a3009; --g800:#2D5016; --g700:#3d6b1f; --g600:#4e8827;
+  --g500:#5fa32e; --g400:#7ec44a; --g200:#c5e8a0; --g100:#e8f5d8; --g50:#f4fae9;
+  --a500:#f59e0b; --a400:#fbbf24; --a100:#fef3c7;
+  --r500:#ef4444; --r100:#fee2e2;
+  --b500:#3b82f6; --b100:#dbeafe;
+  --gray900:#111827; --gray800:#1f2937; --gray700:#374151;
+  --gray600:#4b5563; --gray500:#6b7280; --gray400:#9ca3af;
+  --gray300:#d1d5db; --gray200:#e5e7eb; --gray100:#f3f4f6; --gray50:#f9fafb;
+  --white:#ffffff;
+  --radius-sm:8px; --radius:12px; --radius-lg:16px; --radius-xl:24px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.1); --shadow:0 2px 8px rgba(0,0,0,.12);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.15);
+  --nav-h:64px; --top-h:56px; --safe-bottom:env(safe-area-inset-bottom,0px);
+  --font:'Inter',system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:var(--font);background:var(--gray50);color:var(--gray900);overscroll-behavior:none}
+button,input,select,textarea{font-family:var(--font)}
+
+/* ═══════════════════════════════════════════
+   SPLASH SCREEN
+═══════════════════════════════════════════ */
+#splash{
+  position:fixed;inset:0;background:linear-gradient(160deg,var(--g900) 0%,var(--g700) 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;
+  transition:opacity .4s ease;
+}
+#splash .logo{width:80px;height:80px;background:rgba(255,255,255,.15);border-radius:24px;
+  display:flex;align-items:center;justify-content:center;margin-bottom:20px;
+  animation:popIn .5s cubic-bezier(.34,1.56,.64,1);}
+#splash .logo svg{width:44px;height:44px;fill:var(--white);}
+#splash h1{color:var(--white);font-size:24px;font-weight:800;letter-spacing:-.3px;}
+#splash p{color:rgba(255,255,255,.6);font-size:13px;margin-top:6px;}
+#splash .loader{width:40px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;
+  margin-top:40px;overflow:hidden;}
+#splash .loader::after{content:'';display:block;width:40%;height:100%;background:var(--g400);
+  border-radius:2px;animation:loading 1s ease infinite;}
+@keyframes loading{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+@keyframes popIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* ═══════════════════════════════════════════
+   LOGIN
+═══════════════════════════════════════════ */
+#loginScreen{
+  display:none;min-height:100vh;
+  background:linear-gradient(160deg,var(--g900) 0%,var(--g700) 100%);
+  align-items:flex-end;justify-content:center;padding:0;
+}
+#loginScreen.show{display:flex;}
+.login-sheet{
+  background:var(--white);border-radius:32px 32px 0 0;
+  width:100%;max-width:480px;padding:32px 24px calc(32px + var(--safe-bottom));
+  animation:slideUp .35s cubic-bezier(.34,1.1,.64,1);
+}
+@keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+.login-logo{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
+.login-logo .ico{width:48px;height:48px;background:var(--g800);border-radius:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.login-logo .ico svg{width:26px;height:26px;fill:var(--white);}
+.login-logo .txt{line-height:1.2;}
+.login-logo .txt strong{font-size:18px;font-weight:800;color:var(--g800);}
+.login-logo .txt span{font-size:11px;color:var(--gray500);text-transform:uppercase;letter-spacing:.8px;display:block;}
+.login-title{font-size:26px;font-weight:800;color:var(--gray900);margin-bottom:4px;}
+.login-sub{font-size:14px;color:var(--gray500);margin-bottom:24px;}
+
+/* ═══════════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════════ */
+#app{display:none;height:100vh;flex-direction:column;overflow:hidden;}
+#app.show{display:flex;}
+
+/* Top bar */
+.topbar{
+  height:var(--top-h);background:var(--g800);color:var(--white);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;padding-top:env(safe-area-inset-top,0);flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);position:relative;z-index:100;
+}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.topbar-logo{width:32px;height:32px;background:rgba(255,255,255,.15);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;}
+.topbar-logo svg{width:18px;height:18px;fill:var(--white);}
+.topbar-title{font-size:16px;font-weight:700;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.icon-btn{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.12);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:var(--white);position:relative;transition:background .15s;}
+.icon-btn:active{background:rgba(255,255,255,.25);}
+.icon-btn svg{width:18px;height:18px;}
+.notif-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;
+  background:var(--a400);border-radius:50%;border:2px solid var(--g800);}
+
+/* Offline strip */
+.offline-strip{
+  background:var(--a500);color:var(--gray900);
+  display:none;align-items:center;justify-content:center;gap:8px;
+  padding:8px 16px;font-size:12px;font-weight:700;flex-shrink:0;
+}
+.offline-strip.show{display:flex;}
+.offline-strip svg{width:14px;height:14px;flex-shrink:0;}
+
+/* Scroll area */
+.app-body{flex:1;overflow-y:auto;overflow-x:hidden;
+  padding-bottom:calc(var(--nav-h) + var(--safe-bottom));}
+
+/* Bottom navigation */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(var(--nav-h) + var(--safe-bottom));
+  background:var(--white);border-top:1px solid var(--gray200);
+  display:flex;align-items:flex-start;padding-top:8px;
+  box-shadow:0 -2px 12px rgba(0,0,0,.08);z-index:100;
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:0 4px;background:none;border:none;cursor:pointer;
+  color:var(--gray400);transition:color .15s;position:relative;
+}
+.nav-btn.active{color:var(--g700);}
+.nav-btn svg{width:22px;height:22px;}
+.nav-btn span{font-size:10px;font-weight:600;letter-spacing:.2px;}
+.nav-badge{position:absolute;top:-2px;right:calc(50% - 18px);
+  background:var(--r500);color:var(--white);font-size:9px;font-weight:800;
+  border-radius:10px;min-width:16px;height:16px;display:flex;
+  align-items:center;justify-content:center;padding:0 4px;}
+
+/* Pages */
+.page{display:none;min-height:100%;}
+.page.show{display:block;}
+
+/* ═══════════════════════════════════════════
+   FORM COMPONENTS
+═══════════════════════════════════════════ */
+.form-group{margin-bottom:16px;}
+.form-label{display:block;font-size:13px;font-weight:600;color:var(--gray700);margin-bottom:6px;}
+.req{color:var(--r500);}
+.form-input,.form-select,.form-textarea{
+  width:100%;padding:13px 14px;border:1.5px solid var(--gray200);
+  border-radius:var(--radius);font-size:15px;color:var(--gray900);
+  background:var(--white);transition:border-color .2s,box-shadow .2s;outline:none;
+  -webkit-appearance:none;appearance:none;
+}
+.form-input:focus,.form-select:focus,.form-textarea:focus{
+  border-color:var(--g500);box-shadow:0 0 0 3px rgba(95,163,46,.15);}
+.form-select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;padding-right:40px;
+}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.input-group{position:relative;}
+.input-suffix{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--gray400);font-weight:500;}
+
+/* Checkbox pill style */
+.check-pills{display:flex;flex-wrap:wrap;gap:8px;}
+.check-pill input{display:none;}
+.check-pill label{
+  display:inline-flex;align-items:center;gap:5px;padding:7px 12px;
+  background:var(--gray100);border:1.5px solid var(--gray200);
+  border-radius:20px;font-size:12px;font-weight:600;color:var(--gray600);
+  cursor:pointer;transition:all .15s;user-select:none;
+}
+.check-pill input:checked + label{
+  background:var(--g100);border-color:var(--g400);color:var(--g800);}
+.check-pill label.danger{border-color:var(--r500);}
+.check-pill input:checked + label.danger{background:var(--r100);border-color:var(--r500);color:#991b1b;}
+
+/* ═══════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px 20px;border-radius:var(--radius);font-size:15px;font-weight:700;
+  cursor:pointer;border:none;transition:all .15s;white-space:nowrap;
+  min-height:50px;
+}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn-primary{background:var(--g700);color:var(--white);}
+.btn-primary:active{background:var(--g800);}
+.btn-danger{background:var(--r500);color:var(--white);}
+.btn-outline{background:transparent;color:var(--g700);border:1.5px solid var(--g300,#86efac);}
+.btn-ghost{background:transparent;color:var(--gray600);}
+.btn-secondary{background:var(--gray100);color:var(--gray700);}
+.btn-block{width:100%;}
+.btn-sm{min-height:36px;padding:8px 14px;font-size:13px;border-radius:var(--radius-sm);}
+.btn svg{width:18px;height:18px;}
+
+/* ═══════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════ */
+.card{background:var(--white);border-radius:var(--radius-lg);
+  border:1px solid var(--gray200);box-shadow:var(--shadow-sm);overflow:hidden;}
+.card-body{padding:16px;}
+.card-header{padding:14px 16px;border-bottom:1px solid var(--gray100);
+  display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:15px;font-weight:700;color:var(--gray900);}
+.card-footer{padding:12px 16px;border-top:1px solid var(--gray100);background:var(--gray50);}
+
+/* ═══════════════════════════════════════════
+   PAGE CONTENT
+═══════════════════════════════════════════ */
+.page-pad{padding:16px;}
+.section-title{font-size:12px;font-weight:700;color:var(--gray400);
+  text-transform:uppercase;letter-spacing:.8px;margin:20px 0 10px;}
+
+/* Stat grid */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.stat-card{background:var(--white);border-radius:var(--radius-lg);padding:16px;
+  border:1px solid var(--gray200);box-shadow:var(--shadow-sm);}
+.stat-card .icon{width:40px;height:40px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+.stat-card .icon svg{width:20px;height:20px;}
+.stat-card .val{font-size:28px;font-weight:800;color:var(--gray900);line-height:1;}
+.stat-card .lbl{font-size:11px;font-weight:600;color:var(--gray500);margin-top:4px;text-transform:uppercase;letter-spacing:.3px;}
+.ic-green{background:var(--g100);color:var(--g700);}
+.ic-amber{background:var(--a100);color:#92400e;}
+.ic-blue{background:var(--b100);color:var(--b500);}
+.ic-red{background:var(--r100);color:var(--r500);}
+
+/* List items */
+.list-item{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:var(--white);border-bottom:1px solid var(--gray100);
+  cursor:pointer;transition:background .15s;
+}
+.list-item:active{background:var(--gray50);}
+.list-item:last-child{border-bottom:none;}
+.list-item .li-icon{width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:18px;}
+.list-item .li-body{flex:1;min-width:0;}
+.list-item .li-title{font-size:14px;font-weight:700;color:var(--gray900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.list-item .li-sub{font-size:12px;color:var(--gray500);margin-top:2px;}
+.list-item .li-right{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.list-item .li-meta{font-size:11px;color:var(--gray400);}
+.chevron{color:var(--gray300);}
+.chevron svg{width:16px;height:16px;}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-green{background:var(--g100);color:var(--g800);}
+.badge-amber{background:var(--a100);color:#92400e;}
+.badge-red{background:var(--r100);color:#991b1b;}
+.badge-blue{background:var(--b100);color:#1e40af;}
+.badge-gray{background:var(--gray100);color:var(--gray600);}
+
+/* ═══════════════════════════════════════════
+   COLLECT ACTION CARDS
+═══════════════════════════════════════════ */
+.collect-grid{display:grid;grid-template-columns:1fr;gap:12px;}
+.collect-card{
+  background:var(--white);border-radius:var(--radius-xl);padding:20px;
+  border:1.5px solid var(--gray200);display:flex;align-items:center;gap:16px;
+  cursor:pointer;transition:all .15s;box-shadow:var(--shadow-sm);
+}
+.collect-card:active{transform:scale(.98);box-shadow:none;}
+.collect-card .cc-icon{width:56px;height:56px;border-radius:16px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:26px;}
+.collect-card .cc-body{flex:1;}
+.collect-card .cc-title{font-size:16px;font-weight:800;color:var(--gray900);}
+.collect-card .cc-sub{font-size:12px;color:var(--gray500);margin-top:4px;line-height:1.4;}
+.collect-card .cc-arrow{color:var(--gray300);}
+.collect-card .cc-arrow svg{width:20px;height:20px;}
+.cc-green{background:var(--g100);}
+.cc-amber{background:var(--a100);}
+.cc-blue{background:var(--b100);}
+
+/* ═══════════════════════════════════════════
+   SHEET / BOTTOM MODAL
+═══════════════════════════════════════════ */
+.sheet-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;
+  opacity:0;pointer-events:none;transition:opacity .25s;backdrop-filter:blur(2px);
+}
+.sheet-overlay.open{opacity:1;pointer-events:all;}
+.sheet{
+  position:fixed;bottom:0;left:0;right:0;background:var(--white);
+  border-radius:24px 24px 0 0;z-index:501;max-height:92vh;
+  display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.34,1.1,.64,1);
+  padding-bottom:var(--safe-bottom);
+}
+.sheet.open{transform:translateY(0);}
+.sheet-handle{width:40px;height:4px;background:var(--gray200);border-radius:2px;
+  margin:12px auto 0;flex-shrink:0;}
+.sheet-header{padding:16px 20px 12px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--gray100);}
+.sheet-title{font-size:17px;font-weight:800;color:var(--gray900);}
+.sheet-close{width:32px;height:32px;border-radius:50%;background:var(--gray100);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--gray600);}
+.sheet-body{overflow-y:auto;padding:16px 20px;flex:1;}
+.sheet-footer{padding:12px 20px;border-top:1px solid var(--gray100);
+  display:flex;gap:10px;flex-shrink:0;}
+
+/* ═══════════════════════════════════════════
+   STEPS
+═══════════════════════════════════════════ */
+.steps{display:flex;align-items:center;gap:0;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;}
+.step-item{display:flex;align-items:center;gap:0;flex-shrink:0;}
+.step-circle{width:28px;height:28px;border-radius:50%;border:2px solid var(--gray300);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  color:var(--gray400);transition:all .2s;flex-shrink:0;}
+.step-circle.active{border-color:var(--g600);background:var(--g600);color:var(--white);}
+.step-circle.done{border-color:var(--g400);background:var(--g100);color:var(--g700);}
+.step-label{font-size:11px;font-weight:600;color:var(--gray400);margin:0 6px;white-space:nowrap;}
+.step-label.active{color:var(--g700);}
+.step-line{width:20px;height:2px;background:var(--gray200);flex-shrink:0;}
+.step-line.done{background:var(--g400);}
+
+/* ═══════════════════════════════════════════
+   TABLE (horizontal scroll on mobile)
+═══════════════════════════════════════════ */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:400px;}
+thead{background:var(--gray50);}
+th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;
+  color:var(--gray500);text-transform:uppercase;letter-spacing:.5px;
+  border-bottom:1px solid var(--gray200);white-space:nowrap;}
+td{padding:12px;border-bottom:1px solid var(--gray100);color:var(--gray700);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+
+/* ═══════════════════════════════════════════
+   ALERTS & TOASTS
+═══════════════════════════════════════════ */
+.alert{padding:12px 14px;border-radius:var(--radius);margin-bottom:14px;font-size:13px;
+  display:flex;align-items:flex-start;gap:10px;}
+.alert svg{width:16px;height:16px;flex-shrink:0;margin-top:1px;}
+.alert-success{background:var(--g50);color:var(--g800);border:1px solid var(--g200);}
+.alert-error{background:var(--r100);color:#991b1b;border:1px solid #fca5a5;}
+.alert-warning{background:var(--a100);color:#92400e;border:1px solid #fde68a;}
+.alert-info{background:var(--b100);color:#1e40af;border:1px solid #bfdbfe;}
+
+.toast-container{position:fixed;top:calc(var(--top-h) + 8px);left:16px;right:16px;z-index:9000;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.toast{background:var(--gray900);color:var(--white);padding:13px 16px;border-radius:var(--radius);
+  font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;
+  box-shadow:var(--shadow-lg);animation:toastIn .3s ease;pointer-events:all;}
+.toast.success{background:var(--g800);}
+.toast.error{background:var(--r500);}
+.toast.warning{background:#b45309;}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ═══════════════════════════════════════════
+   EMPTY STATE
+═══════════════════════════════════════════ */
+.empty-state{text-align:center;padding:48px 20px;}
+.empty-state .es-icon{font-size:48px;margin-bottom:12px;}
+.empty-state .es-title{font-size:16px;font-weight:700;color:var(--gray700);margin-bottom:6px;}
+.empty-state .es-sub{font-size:13px;color:var(--gray400);line-height:1.5;}
+
+/* ═══════════════════════════════════════════
+   AI CHAT FAB
+═══════════════════════════════════════════ */
+.ai-fab{
+  position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 12px);right:16px;
+  width:52px;height:52px;border-radius:50%;background:var(--g700);border:none;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--shadow-lg);z-index:200;transition:transform .15s;
+  color:var(--white);
+}
+.ai-fab:active{transform:scale(.9);}
+.ai-fab svg{width:22px;height:22px;}
+
+/* ═══════════════════════════════════════════
+   USER PROFILE HEADER
+═══════════════════════════════════════════ */
+.profile-header{
+  background:linear-gradient(135deg,var(--g800),var(--g600));
+  padding:24px 16px 20px;color:var(--white);
+}
+.profile-avatar{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;
+  margin-bottom:12px;border:3px solid rgba(255,255,255,.3);}
+.profile-name{font-size:20px;font-weight:800;}
+.profile-role{font-size:13px;opacity:.75;margin-top:3px;}
+.profile-code{font-size:11px;background:rgba(255,255,255,.15);padding:4px 10px;
+  border-radius:20px;display:inline-block;margin-top:8px;font-weight:600;}
+
+/* ═══════════════════════════════════════════
+   MISC
+═══════════════════════════════════════════ */
+.divider{border:none;border-top:1px solid var(--gray100);margin:16px 0;}
+hr{border:none;border-top:8px solid var(--gray100);margin:0;}
+.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:var(--white);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.text-muted{color:var(--gray400);font-size:13px;}
+.mt-2{margin-top:16px;}.mt-3{margin-top:24px;}.mb-2{margin-bottom:16px;}
+.flex{display:flex;}.items-center{align-items:center;}.gap-2{gap:8px;}.justify-between{justify-content:space-between;}
+.font-bold{font-weight:700;}.text-sm{font-size:13px;}.text-xs{font-size:11px;}
+.w-full{width:100%;}
+code{background:var(--gray100);padding:2px 6px;border-radius:4px;font-size:12px;}
+
+/* Child form block */
+.child-block{background:var(--g50);border:1px solid var(--g200);border-radius:var(--radius-lg);
+  padding:14px;margin-bottom:12px;}
+.child-block-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.child-block-title{font-size:14px;font-weight:700;color:var(--g800);}
+
+/* Sync pulse */
+.sync-pill{display:flex;align-items:center;gap:6px;padding:6px 12px;
+  background:rgba(255,255,255,.12);border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--g400);}
+.sync-dot.offline{background:var(--a400);}
+.sync-dot.syncing{background:var(--b500);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 008 20C19 20 22 3 22 3c-1 2-8 5.25-8 5.25S15.88 5.63 17 8z"/></svg>
+  </div>
+  <h1>Cacao Collector</h1>
+  <p>Collecte de données indicateurs</p>
+  <div class="loader"></div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-sheet">
+    <div class="login-logo">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 008 20C19 20 22 3 22 3c-1 2-8 5.25-8 5.25S15.88 5.63 17 8z"/></svg></div>
+      <div class="txt"><strong>Cacao Collector</strong><span>Système de collecte de données</span></div>
+    </div>
+    <div class="login-title">Connexion</div>
+    <div class="login-sub">Entrez vos identifiants pour continuer</div>
+    <div id="loginErr" class="alert alert-error" style="display:none">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="loginErrMsg"></span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email <span class="req">*</span></label>
+      <input type="email" id="loginEmail" class="form-input" placeholder="exemple@email.com" inputmode="email" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mot de passe <span class="req">*</span></label>
+      <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="loginBtn" onclick="doLogin()">
+      <span id="loginBtnText">Se connecter</span>
+    </button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo"><svg viewBox="0 0 24 24" fill="white"><path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 008 20C19 20 22 3 22 3c-1 2-8 5.25-8 5.25S15.88 5.63 17 8z"/></svg></div>
+      <span class="topbar-title" id="topbarTitle">Cacao App</span>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-pill" id="syncPill" onclick="triggerSync()">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncLabel">En ligne</span>
+      </div>
+      <button class="icon-btn" onclick="openNotifs()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <div class="notif-dot" id="notifDot" style="display:none"></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Offline strip -->
+  <div class="offline-strip" id="offlineStrip">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+    <span>Hors ligne — <strong id="pendingCount">0</strong> fiche(s) en attente</span>
+  </div>
+
+  <!-- Scroll body -->
+  <div class="app-body" id="appBody">
+
+    <!-- ── PAGE ACCUEIL (Dashboard Admin) ── -->
+    <div class="page show" id="page-home">
+      <div class="page-pad">
+        <!-- Welcome -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <div>
+            <div style="font-size:13px;color:var(--gray500);font-weight:500">Bonjour 👋</div>
+            <div style="font-size:20px;font-weight:800;color:var(--gray900)" id="welcomeName">...</div>
+          </div>
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--g100);
+            display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:var(--g800)" id="homeAvatar">?</div>
+        </div>
+
+        <!-- Stats admin -->
+        <div id="adminStats">
+          <div class="section-title">Vue d'ensemble</div>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="icon ic-green"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><div class="val" id="s-coops">-</div><div class="lbl">Coopératives</div></div>
+            <div class="stat-card"><div class="icon ic-blue"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><div class="val" id="s-insp">-</div><div class="lbl">Inspecteurs</div></div>
+            <div class="stat-card"><div class="icon ic-green"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="val" id="s-prod">-</div><div class="lbl">Producteurs</div></div>
+            <div class="stat-card"><div class="icon ic-amber"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><div class="val" id="s-pending">-</div><div class="lbl">À valider</div></div>
+          </div>
+
+          <!-- Pending fiches -->
+          <div class="section-title">Fiches en attente</div>
+          <div class="card" id="pendingFichesCard">
+            <div id="pendingFichesList"><div class="empty-state"><div class="es-icon">📋</div><div class="es-title">Chargement...</div></div></div>
+          </div>
+        </div>
+
+        <!-- Stats inspecteur -->
+        <div id="inspStats" style="display:none">
+          <div class="section-title">Mes fiches récentes</div>
+          <div class="card" id="myFichesList">
+            <div class="empty-state"><div class="es-icon">📋</div><div class="es-title">Chargement...</div></div>
+          </div>
+          <div class="mt-2">
+            <button class="btn btn-primary btn-block" onclick="showPage('collect')">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouvelle collecte
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE COLLECTE (Inspecteur) ── -->
+    <div class="page" id="page-collect">
+      <div class="page-pad">
+        <div style="font-size:20px;font-weight:800;margin-bottom:4px">Collecte</div>
+        <div style="font-size:13px;color:var(--gray500);margin-bottom:20px">Choisissez le type de fiche à remplir</div>
+
+        <div id="offlineAlert" class="alert alert-warning" style="display:none">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Mode hors ligne — données sauvegardées localement</span>
+        </div>
+
+        <div class="collect-grid">
+          <div class="collect-card" onclick="openProfilageSheet()">
+            <div class="cc-icon cc-green">👨‍👩‍👧</div>
+            <div class="cc-body">
+              <div class="cc-title">Profilage Ménage</div>
+              <div class="cc-sub">Informations producteur, membres du ménage et enfants</div>
+            </div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="collect-card" onclick="openArbresSheet()">
+            <div class="cc-icon cc-amber">🌳</div>
+            <div class="cc-body">
+              <div class="cc-title">Arbres d'Ombrage</div>
+              <div class="cc-sub">Espèces, densité et déficit d'arbres sur l'unité certifiée</div>
+            </div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="collect-card" onclick="openEngraisSheet()">
+            <div class="cc-icon cc-blue">🧪</div>
+            <div class="cc-body">
+              <div class="cc-title">Engrais & Pesticides</div>
+              <div class="cc-sub">Engrais organiques, inorganiques et utilisation des pesticides</div>
+            </div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE FICHES ── -->
+    <div class="page" id="page-fiches">
+      <div class="page-pad">
+        <div style="font-size:20px;font-weight:800;margin-bottom:4px" id="fichesPageTitle">Fiches</div>
+        <!-- Tab bar -->
+        <div style="display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;">
+          <button class="btn btn-sm btn-primary" onclick="switchFicheTab('profilage',this)" id="ftab-profilage">Profilage</button>
+          <button class="btn btn-sm btn-secondary" onclick="switchFicheTab('arbres',this)" id="ftab-arbres">Arbres</button>
+          <button class="btn btn-sm btn-secondary" onclick="switchFicheTab('engrais',this)" id="ftab-engrais">Engrais</button>
+        </div>
+        <!-- Filter (admin) -->
+        <div id="ficheAdminFilter" style="display:none;margin-bottom:12px;">
+          <select class="form-select" id="ficheStatutFilter" onchange="loadCurrentFiches()">
+            <option value="">Tous les statuts</option>
+            <option value="soumis">En attente</option>
+            <option value="valide">Validés</option>
+            <option value="rejete">Rejetés</option>
+          </select>
+        </div>
+        <div class="card" id="fichesListContainer">
+          <div class="empty-state"><div class="es-icon">📄</div><div class="es-title">Chargement...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE GESTION (Admin) ── -->
+    <div class="page" id="page-manage">
+      <div class="page-pad">
+        <div style="font-size:20px;font-weight:800;margin-bottom:16px">Gestion</div>
+        <div class="collect-grid">
+          <div class="collect-card" onclick="openCoopsSheet()">
+            <div class="cc-icon cc-green">🏠</div>
+            <div class="cc-body"><div class="cc-title">Coopératives</div><div class="cc-sub">Créer et gérer les coopératives</div></div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="collect-card" onclick="openInspeSheet()">
+            <div class="cc-icon cc-blue">👤</div>
+            <div class="cc-body"><div class="cc-title">Inspecteurs</div><div class="cc-sub">Ajouter et gérer les comptes inspecteurs</div></div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="collect-card" onclick="openProducSheet()">
+            <div class="cc-icon cc-amber">🌱</div>
+            <div class="cc-body"><div class="cc-title">Producteurs</div><div class="cc-sub">Enregistrer les producteurs</div></div>
+            <div class="cc-arrow"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE PROFIL ── -->
+    <div class="page" id="page-profile">
+      <div class="profile-header">
+        <div class="profile-avatar" id="profileAvatar">?</div>
+        <div class="profile-name" id="profileName">...</div>
+        <div class="profile-role" id="profileRole">...</div>
+        <div class="profile-code" id="profileCode"></div>
+      </div>
+      <div class="page-pad">
+        <div class="card mt-2">
+          <div class="list-item" onclick="openAIChat()">
+            <div class="li-icon" style="background:var(--g100)">🤖</div>
+            <div class="li-body"><div class="li-title">Assistant IA</div><div class="li-sub">Chat intelligent — Mistral AI</div></div>
+            <div class="chevron"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="list-item" id="reportBtn" onclick="requestAIReport()" style="display:none">
+            <div class="li-icon" style="background:var(--b100)">📊</div>
+            <div class="li-body"><div class="li-title">Générer un rapport</div><div class="li-sub">Rapport mensuel automatique par IA</div></div>
+            <div class="chevron"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="list-item" id="anomalyBtn" onclick="checkAnomalies()" style="display:none">
+            <div class="li-icon" style="background:var(--r100)">🔍</div>
+            <div class="li-body"><div class="li-title">Détecter les anomalies</div><div class="li-sub">Analyse IA des risques et alertes</div></div>
+            <div class="chevron"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+          <div class="list-item" onclick="syncNow()">
+            <div class="li-icon" style="background:var(--b100)">🔄</div>
+            <div class="li-body"><div class="li-title">Synchroniser</div><div class="li-sub" id="profilePending">Tout est synchronisé</div></div>
+            <div class="chevron"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+          </div>
+        </div>
+        <div class="card mt-2">
+          <div class="list-item" style="cursor:pointer" onclick="doLogout()">
+            <div class="li-icon" style="background:var(--r100)">🚪</div>
+            <div class="li-body"><div class="li-title" style="color:var(--r500)">Se déconnecter</div></div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--gray400)">
+          Cacao Data Collector v1.0<br>Référence 1.7.1 — Novembre 2025
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end app-body -->
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav" id="bottomNav">
+    <!-- Admin nav -->
+    <button class="nav-btn active" id="nav-home" onclick="showPage('home')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+      <span>Accueil</span>
+    </button>
+    <button class="nav-btn" id="nav-fiches" onclick="showPage('fiches')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+      <span>Fiches</span>
+      <div class="nav-badge" id="navBadge" style="display:none">0</div>
+    </button>
+    <button class="nav-btn" id="nav-collect" onclick="showPage('collect')" style="display:none">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>Collecter</span>
+    </button>
+    <button class="nav-btn" id="nav-manage" onclick="showPage('manage')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 17.66l-1.41 1.41M20 12h2M2 12h2m15.07 7.07l-1.41-1.41M5.34 6.34L3.93 4.93M12 20v2M12 2v2"/></svg>
+      <span>Gestion</span>
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="showPage('profile')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>Profil</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ════════════════ SHEETS ════════════════ -->
+
+<!-- Fiche Profilage Sheet -->
+<div class="sheet-overlay" id="profilageOverlay" onclick="closeSheet('profilage')"></div>
+<div class="sheet" id="profilageSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">👨‍👩‍👧 Profilage Ménage</div>
+    <button class="sheet-close" onclick="closeSheet('profilage')">✕</button>
+  </div>
+  <div class="sheet-body" id="profilageSheetBody">
+    <!-- Steps injected by JS -->
+  </div>
+  <div class="sheet-footer" id="profilageSheetFooter"></div>
+</div>
+
+<!-- Fiche Arbres Sheet -->
+<div class="sheet-overlay" id="arbresOverlay" onclick="closeSheet('arbres')"></div>
+<div class="sheet" id="arbresSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🌳 Arbres d'Ombrage</div>
+    <button class="sheet-close" onclick="closeSheet('arbres')">✕</button>
+  </div>
+  <div class="sheet-body" id="arbresSheetBody"></div>
+  <div class="sheet-footer" id="arbresSheetFooter">
+    <button class="btn btn-secondary w-full" onclick="closeSheet('arbres')">Annuler</button>
+    <button class="btn btn-primary w-full" onclick="submitArbres()">✓ Soumettre</button>
+  </div>
+</div>
+
+<!-- Fiche Engrais Sheet -->
+<div class="sheet-overlay" id="engraisOverlay" onclick="closeSheet('engrais')"></div>
+<div class="sheet" id="engraisSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🧪 Engrais & Pesticides</div>
+    <button class="sheet-close" onclick="closeSheet('engrais')">✕</button>
+  </div>
+  <div class="sheet-body" id="engraisSheetBody"></div>
+  <div class="sheet-footer">
+    <button class="btn btn-secondary w-full" onclick="closeSheet('engrais')">Annuler</button>
+    <button class="btn btn-primary w-full" onclick="submitEngrais()">✓ Soumettre</button>
+  </div>
+</div>
+
+<!-- Coops Sheet -->
+<div class="sheet-overlay" id="coopsOverlay" onclick="closeSheet('coops')"></div>
+<div class="sheet" id="coopsSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🏠 Coopératives</div>
+    <button class="sheet-close" onclick="closeSheet('coops')">✕</button>
+  </div>
+  <div class="sheet-body" id="coopsSheetBody"></div>
+  <div class="sheet-footer">
+    <button class="btn btn-primary w-full" onclick="showAddCoopForm()">+ Nouvelle coopérative</button>
+  </div>
+</div>
+
+<!-- Inspecteurs Sheet -->
+<div class="sheet-overlay" id="inspeOverlay" onclick="closeSheet('inspe')"></div>
+<div class="sheet" id="inspeSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">👤 Inspecteurs</div>
+    <button class="sheet-close" onclick="closeSheet('inspe')">✕</button>
+  </div>
+  <div class="sheet-body" id="inspeSheetBody"></div>
+  <div class="sheet-footer">
+    <button class="btn btn-primary w-full" onclick="showAddInspeForm()">+ Ajouter inspecteur</button>
+  </div>
+</div>
+
+<!-- Producteurs Sheet -->
+<div class="sheet-overlay" id="producOverlay" onclick="closeSheet('produc')"></div>
+<div class="sheet" id="producSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🌱 Producteurs</div>
+    <button class="sheet-close" onclick="closeSheet('produc')">✕</button>
+  </div>
+  <div class="sheet-body" id="producSheetBody"></div>
+  <div class="sheet-footer">
+    <button class="btn btn-primary w-full" onclick="showAddProducForm()">+ Nouveau producteur</button>
+  </div>
+</div>
+
+<!-- Validation Sheet -->
+<div class="sheet-overlay" id="validOverlay" onclick="closeSheet('valid')"></div>
+<div class="sheet" id="validSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title" id="validSheetTitle">Valider la fiche</div>
+    <button class="sheet-close" onclick="closeSheet('valid')">✕</button>
+  </div>
+  <div class="sheet-body">
+    <input type="hidden" id="validId"><input type="hidden" id="validType">
+    <div class="form-group">
+      <label class="form-label">Commentaire pour l'inspecteur</label>
+      <textarea class="form-textarea" id="validComment" placeholder="Remarques, corrections demandées..."></textarea>
+    </div>
+  </div>
+  <div class="sheet-footer">
+    <button class="btn btn-danger w-full" onclick="doValidate('rejete')">✗ Rejeter</button>
+    <button class="btn btn-primary w-full" onclick="doValidate('valide')">✓ Valider</button>
+  </div>
+</div>
+
+<!-- Notifications Sheet -->
+<div class="sheet-overlay" id="notifsOverlay" onclick="closeSheet('notifs')"></div>
+<div class="sheet" id="notifsSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🔔 Notifications</div>
+    <button class="sheet-close" onclick="closeSheet('notifs')">✕</button>
+  </div>
+  <div class="sheet-body" id="notifsBody">
+    <div class="empty-state"><div class="es-icon">🔔</div><div class="es-title">Chargement...</div></div>
+  </div>
+  <div class="sheet-footer">
+    <button class="btn btn-ghost w-full" onclick="markNotifsRead()">Tout marquer comme lu</button>
+  </div>
+</div>
+
+<!-- AI Chat Sheet -->
+<div class="sheet-overlay" id="aiOverlay" onclick="closeSheet('ai')"></div>
+<div class="sheet" id="aiSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title">🤖 Assistant IA Cacao</div>
+    <button class="sheet-close" onclick="closeSheet('ai')">✕</button>
+  </div>
+  <div class="sheet-body" id="aiMessages" style="display:flex;flex-direction:column;gap:10px;padding-bottom:8px;">
+    <div style="background:var(--g50);border-radius:12px;border-bottom-left-radius:4px;padding:12px;font-size:14px;color:var(--gray700);align-self:flex-start;max-width:85%">
+      Bonjour! Je suis votre assistant expert en agriculture cacao. Comment puis-je vous aider?
+    </div>
+  </div>
+  <div class="sheet-footer" style="gap:8px;">
+    <input type="text" id="aiInput" class="form-input" placeholder="Posez votre question..." style="flex:1;min-height:44px;" onkeydown="if(event.key==='Enter')sendAI()">
+    <button class="btn btn-primary" style="min-height:44px;padding:0 16px;" onclick="sendAI()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- AI FAB (visible everywhere) -->
+<button class="ai-fab" onclick="openAIChat()" id="aiFab" style="display:none">
+  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+</button>
+
+<script src="js/db.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
