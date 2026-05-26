@@ -178,6 +178,17 @@ class LocalDB {
         for (const c of list) await this.put('cooperatives', c);
     }
 
+    // Queue any request for offline sync
+    async queueRequest(endpoint, method, data) {
+        const localId = 'req-' + Date.now() + '-' + Math.random().toString(36).substr(2,6);
+        await this.put('pendingSync', {
+            localId, type: 'request',
+            endpoint, method, data,
+            timestamp: Date.now(), status: 'pending'
+        });
+        return localId;
+    }
+
     async saveSession(user) {
         await this.put('session', { key: 'user', value: user });
     }

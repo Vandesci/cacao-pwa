@@ -222,12 +222,39 @@ if ($resource === 'fiches-profilage') {
         } catch(Exception $e){$db->rollBack();jsonError($e->getMessage());}
     }
     if ($method === 'PUT' && $id) {
-        requireAdmin();
-        $db->prepare("UPDATE fiches_profilage SET statut=?,commentaire_admin=? WHERE id=?")->execute([$body['statut']??'valide',$body['commentaire_admin']??'',$id]);
-        $f=$db->prepare("SELECT inspecteur_id FROM fiches_profilage WHERE id=?");$f->execute([$id]);$fi=$f->fetch();
-        if($fi){$msg=($body['statut']==='valide')?"Fiche #$id validée ✓":"Fiche #$id rejetée.";$db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")->execute([$fi['inspecteur_id'],'fiche_'.$body['statut'],$msg]);}
-        jsonSuccess([],'OK');
+        $fiche_q = $db->prepare("SELECT * FROM fiches_profilage WHERE id=?");
+        $fiche_q->execute([$id]); $fi = $fiche_q->fetch();
+        if (!$fi) jsonError('Fiche non trouvée', 404);
+
+        if (!empty($body['statut']) && in_array($body['statut'], ['valide','rejete'])) {
+            requireAdmin();
+            $db->prepare("UPDATE fiches_profilage SET statut=?,commentaire_admin=? WHERE id=?")
+               ->execute([$body['statut'],$body['commentaire_admin']??'',$id]);
+            $msg = ($body['statut']==='valide') ? "Fiche profilage #$id validée ✓" : "Fiche profilage #$id rejetée.";
+            $db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")
+               ->execute([$fi['inspecteur_id'],'fiche_'.$body['statut'],$msg]);
+            jsonSuccess([],'OK');
+        } else {
+            $canEdit = ($user['role']==='admin') || ($user['role']==='superadmin') ||
+                       ($fi['inspecteur_id']==$user['id'] && in_array($fi['statut'],['brouillon','rejete']));
+            if (!$canEdit) jsonError('Non autorisé', 403);
+            $db->prepare("UPDATE fiches_profilage SET date_profilage=?,nom_communaute=?,nb_membres_hommes=?,nb_membres_femmes=?,nb_membres_total=?,nb_travailleurs_hommes=?,nb_travailleurs_femmes=?,nb_travailleurs_total=?,statut='soumis' WHERE id=?")
+               ->execute([$body['date_profilage']??$fi['date_profilage'],$body['nom_communaute']??$fi['nom_communaute'],$body['nb_membres_hommes']??0,$body['nb_membres_femmes']??0,$body['nb_membres_total']??0,$body['nb_travailleurs_hommes']??0,$body['nb_travailleurs_femmes']??0,$body['nb_travailleurs_total']??0,$id]);
+            jsonSuccess([],'Modifiée');
+        }
     }
+    if ($method === 'DELETE' && $id) {
+        $fiche_q = $db->prepare("SELECT * FROM fiches_profilage WHERE id=?");
+        $fiche_q->execute([$id]); $fi = $fiche_q->fetch();
+        if (!$fi) jsonError('Non trouvée', 404);
+        $canDel = ($user['role']==='admin') || ($user['role']==='superadmin') ||
+                  ($fi['inspecteur_id']==$user['id'] && in_array($fi['statut'],['brouillon','rejete']));
+        if (!$canDel) jsonError('Non autorisé', 403);
+        $db->prepare("DELETE FROM enfants_menage WHERE fiche_profilage_id=?")->execute([$id]);
+        $db->prepare("DELETE FROM fiches_profilage WHERE id=?")->execute([$id]);
+        jsonSuccess([],'Supprimée');
+    }
+    jsonError('Méthode non supportée', 405);
 }
 
 // ── FICHES ARBRES ──────────────────────────────────────────
@@ -254,7 +281,31 @@ if ($resource === 'fiches-arbres') {
             $db->commit();jsonSuccess(['id'=>$fid],'OK');
         }catch(Exception $e){$db->rollBack();jsonError($e->getMessage());}
     }
-    if ($method==='PUT'&&$id){requireAdmin();$db->prepare("UPDATE fiches_arbres SET statut=?,commentaire_admin=? WHERE id=?")->execute([$body['statut']??'valide',$body['commentaire_admin']??'',$id]);jsonSuccess([],'OK');}
+    if ($method==='PUT' && $id) {
+        $fq=$db->prepare("SELECT * FROM fiches_arbres WHERE id=?");$fq->execute([$id]);$fi=$fq->fetch();
+        if(!$fi) jsonError('Non trouvée',404);
+        if(!empty($body['statut'])&&in_array($body['statut'],['valide','rejete'])){
+            requireAdmin();
+            $db->prepare("UPDATE fiches_arbres SET statut=?,commentaire_admin=? WHERE id=?")->execute([$body['statut'],$body['commentaire_admin']??'',$id]);
+            jsonSuccess([],'OK');
+        } else {
+            $canEdit=($user['role']==='admin')||($user['role']==='superadmin')||($fi['inspecteur_id']==$user['id']&&in_array($fi['statut'],['brouillon','rejete']));
+            if(!$canEdit) jsonError('Non autorisé',403);
+            $db->prepare("UPDATE fiches_arbres SET date_collecte=?,nb_arbres_ombrage=?,densite_par_hectare=?,nb_arbres_deficitaires=?,statut='soumis' WHERE id=?")
+               ->execute([$body['date_collecte']??$fi['date_collecte'],$body['nb_arbres_ombrage']??0,$body['densite_par_hectare']??0,$body['nb_arbres_deficitaires']??0,$id]);
+            jsonSuccess([],'Modifiée');
+        }
+    }
+    if ($method==='DELETE' && $id) {
+        $fq=$db->prepare("SELECT * FROM fiches_arbres WHERE id=?");$fq->execute([$id]);$fi=$fq->fetch();
+        if(!$fi) jsonError('Non trouvée',404);
+        $canDel=($user['role']==='admin')||($user['role']==='superadmin')||($fi['inspecteur_id']==$user['id']&&in_array($fi['statut'],['brouillon','rejete']));
+        if(!$canDel) jsonError('Non autorisé',403);
+        $db->prepare("DELETE FROM especes_arbres WHERE fiche_arbre_id=?")->execute([$id]);
+        $db->prepare("DELETE FROM fiches_arbres WHERE id=?")->execute([$id]);
+        jsonSuccess([],'Supprimée');
+    }
+    jsonError('Méthode non supportée',405);
 }
 
 // ── FICHES ENGRAIS ─────────────────────────────────────────
@@ -279,7 +330,32 @@ if ($resource === 'fiches-engrais') {
             $db->commit();jsonSuccess(['id'=>$fid],'OK');
         }catch(Exception $e){$db->rollBack();jsonError($e->getMessage());}
     }
-    if($method==='PUT'&&$id){requireAdmin();$db->prepare("UPDATE fiches_engrais SET statut=?,commentaire_admin=? WHERE id=?")->execute([$body['statut']??'valide',$body['commentaire_admin']??'',$id]);jsonSuccess([],'OK');}
+    if ($method==='PUT' && $id) {
+        $fq=$db->prepare("SELECT * FROM fiches_engrais WHERE id=?");$fq->execute([$id]);$fi=$fq->fetch();
+        if(!$fi) jsonError('Non trouvée',404);
+        if(!empty($body['statut'])&&in_array($body['statut'],['valide','rejete'])){
+            requireAdmin();
+            $db->prepare("UPDATE fiches_engrais SET statut=?,commentaire_admin=? WHERE id=?")->execute([$body['statut'],$body['commentaire_admin']??'',$id]);
+            jsonSuccess([],'OK');
+        } else {
+            $canEdit=($user['role']==='admin')||($user['role']==='superadmin')||($fi['inspecteur_id']==$user['id']&&in_array($fi['statut'],['brouillon','rejete']));
+            if(!$canEdit) jsonError('Non autorisé',403);
+            $db->prepare("UPDATE fiches_engrais SET date_collecte=?,statut='soumis' WHERE id=?")->execute([$body['date_collecte']??$fi['date_collecte'],$id]);
+            jsonSuccess([],'Modifiée');
+        }
+    }
+    if ($method==='DELETE' && $id) {
+        $fq=$db->prepare("SELECT * FROM fiches_engrais WHERE id=?");$fq->execute([$id]);$fi=$fq->fetch();
+        if(!$fi) jsonError('Non trouvée',404);
+        $canDel=($user['role']==='admin')||($user['role']==='superadmin')||($fi['inspecteur_id']==$user['id']&&in_array($fi['statut'],['brouillon','rejete']));
+        if(!$canDel) jsonError('Non autorisé',403);
+        $db->prepare("DELETE FROM engrais_organiques WHERE fiche_engrais_id=?")->execute([$id]);
+        $db->prepare("DELETE FROM engrais_inorganiques WHERE fiche_engrais_id=?")->execute([$id]);
+        $db->prepare("DELETE FROM pesticides WHERE fiche_engrais_id=?")->execute([$id]);
+        $db->prepare("DELETE FROM fiches_engrais WHERE id=?")->execute([$id]);
+        jsonSuccess([],'Supprimée');
+    }
+    jsonError('Méthode non supportée',405);
 }
 
 // ── STATS ──────────────────────────────────────────────────
@@ -393,3 +469,163 @@ if ($resource === 'ai-anomalies') {
 }
 
 jsonError('Ressource non trouvée: ' . $resource, 404);
+
+// ── DEMANDES INSCRIPTION COOPERATIVE ──────────────────────
+if ($resource === 'cooperative-requests') {
+    $db = getDB();
+
+    // Liste (superadmin) ou soumettre (public via POST sans auth)
+    if ($method === 'GET') {
+        requireLogin();
+        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
+        $statut = $_GET['statut'] ?? '';
+        $sql = "SELECT * FROM cooperative_requests WHERE 1=1";
+        $params = [];
+        if ($statut) { $sql .= " AND statut=?"; $params[] = $statut; }
+        $sql .= " ORDER BY created_at DESC";
+        $stmt = $db->prepare($sql); $stmt->execute($params);
+        jsonSuccess(['data' => $stmt->fetchAll()]);
+    }
+
+    // Soumettre une demande (public - pas besoin d'être connecté)
+    if ($method === 'POST' && $action === '') {
+        $nom      = trim($body['nom'] ?? '');
+        $email    = trim($body['email'] ?? '');
+        $password = $body['password'] ?? '';
+        $tel      = $body['telephone'] ?? '';
+        $loc      = $body['localite'] ?? '';
+
+        if (!$nom || !$email || !$password) jsonError('Nom, email et mot de passe requis');
+        if (strlen($password) < 6) jsonError('Mot de passe: minimum 6 caractères');
+
+        // Vérifier email unique
+        $exist = $db->prepare("SELECT id FROM cooperative_requests WHERE email=?");
+        $exist->execute([$email]);
+        if ($exist->fetch()) jsonError('Cet email est déjà utilisé pour une demande');
+
+        $exist2 = $db->prepare("SELECT id FROM users WHERE email=?");
+        $exist2->execute([$email]);
+        if ($exist2->fetch()) jsonError('Cet email est déjà associé à un compte');
+
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $db->prepare("INSERT INTO cooperative_requests (nom,email,telephone,localite,password_hash) VALUES (?,?,?,?,?)")
+           ->execute([$nom, $email, $tel, $loc, $hash]);
+
+        // Notifier les superadmins
+        $admins = $db->query("SELECT id FROM users WHERE role='superadmin'")->fetchAll();
+        foreach ($admins as $a) {
+            $db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")
+               ->execute([$a['id'], 'new_request', "Nouvelle demande d'inscription: $nom ($email)"]);
+        }
+
+        jsonSuccess([], 'Demande envoyée avec succès');
+    }
+
+    // Valider ou rejeter (superadmin)
+    if ($method === 'PUT' && $id) {
+        requireLogin();
+        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
+
+        $statut = $body['statut'] ?? '';
+        $db->prepare("UPDATE cooperative_requests SET statut=?, validated_at=NOW(), validated_by=? WHERE id=?")
+           ->execute([$statut, $_SESSION['user_id'], $id]);
+
+        if ($statut === 'valide') {
+            // Créer la coopérative
+            $req = $db->prepare("SELECT * FROM cooperative_requests WHERE id=?");
+            $req->execute([$id]);
+            $r = $req->fetch();
+
+            $code = 'COOP-' . strtoupper(substr(md5($r['email'].time()), 0, 6));
+            $db->prepare("INSERT INTO cooperatives (nom,email,telephone,localite,code,statut) VALUES (?,?,?,?,?,'active')")
+               ->execute([$r['nom'], $r['email'], $r['telephone'], $r['localite'], $code]);
+            $coopId = $db->lastInsertId();
+
+            // Créer le compte admin de la coopérative
+            $db->prepare("INSERT INTO users (nom,prenom,email,password,role,cooperative_id,is_coop_admin,actif) VALUES (?,?,?,?,'admin',?,1,1)")
+               ->execute([$r['nom'], 'Admin', $r['email'], $r['password_hash'], $coopId]);
+
+            jsonSuccess(['coop_id' => $coopId], 'Coopérative validée et compte créé');
+        } else {
+            jsonSuccess([], 'Demande rejetée');
+        }
+    }
+}
+
+// ── SUPERADMIN STATS ───────────────────────────────────────
+if ($resource === 'sa-stats') {
+    requireLogin();
+    if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
+    $db = getDB();
+    jsonSuccess(['stats' => [
+        'pending_requests' => (int)$db->query("SELECT COUNT(*) FROM cooperative_requests WHERE statut='en_attente'")->fetchColumn(),
+        'total_coops'      => (int)$db->query("SELECT COUNT(*) FROM cooperatives")->fetchColumn(),
+        'total_users'      => (int)$db->query("SELECT COUNT(*) FROM users WHERE actif=1")->fetchColumn(),
+        'total_fiches'     => (int)$db->query("SELECT (SELECT COUNT(*) FROM fiches_profilage) + (SELECT COUNT(*) FROM fiches_arbres) + (SELECT COUNT(*) FROM fiches_engrais) as total")->fetchColumn(),
+    ]]);
+}
+
+// ── MODIFIER FICHE ─────────────────────────────────────────
+if ($resource === 'fiche-delete') {
+    requireLogin();
+    $db   = getDB();
+    $type = $parts[$apiIdx + 2] ?? '';
+    $fid  = $parts[$apiIdx + 3] ?? null;
+    if (!$fid) jsonError('ID requis');
+
+    if ($method === 'DELETE') {
+        $tables = ['profilage'=>'fiches_profilage','arbres'=>'fiches_arbres','engrais'=>'fiches_engrais'];
+        $table  = $tables[$type] ?? null;
+        if (!$table) jsonError('Type invalide');
+        $db->prepare("DELETE FROM $table WHERE id=?")->execute([$fid]);
+        jsonSuccess([], 'Fiche supprimée');
+    }
+}
+
+// ── STATS INSPECTEUR ───────────────────────────────────────
+if ($resource === 'inspecteur-stats') {
+    requireLogin();
+    $db     = getDB();
+    $inspId = $id ?? $user['id'];
+    jsonSuccess(['stats' => [
+        'profilage' => [
+            'total'  => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId")->fetchColumn(),
+            'soumis' => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId AND statut='soumis'")->fetchColumn(),
+            'valide' => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId AND statut='valide'")->fetchColumn(),
+            'rejete' => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId AND statut='rejete'")->fetchColumn(),
+        ],
+        'arbres'  => ['total'=>(int)$db->query("SELECT COUNT(*) FROM fiches_arbres WHERE inspecteur_id=$inspId")->fetchColumn(),'valide'=>(int)$db->query("SELECT COUNT(*) FROM fiches_arbres WHERE inspecteur_id=$inspId AND statut='valide'")->fetchColumn()],
+        'engrais' => ['total'=>(int)$db->query("SELECT COUNT(*) FROM fiches_engrais WHERE inspecteur_id=$inspId")->fetchColumn(),'valide'=>(int)$db->query("SELECT COUNT(*) FROM fiches_engrais WHERE inspecteur_id=$inspId AND statut='valide'")->fetchColumn()],
+        'ce_mois' => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId AND MONTH(created_at)=MONTH(NOW()) AND YEAR(created_at)=YEAR(NOW())")->fetchColumn(),
+        'total_all'=> (int)$db->query("SELECT (SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$inspId)+(SELECT COUNT(*) FROM fiches_arbres WHERE inspecteur_id=$inspId)+(SELECT COUNT(*) FROM fiches_engrais WHERE inspecteur_id=$inspId) as t")->fetchColumn(),
+    ]]);
+}
+
+// ── STATS ADMIN COOP ───────────────────────────────────────
+if ($resource === 'coop-stats') {
+    requireLogin();
+    $db     = getDB();
+    $coopId = $user['cooperative_id'];
+    if (!$coopId) jsonError('Pas de coopérative associée');
+
+    // Stats par inspecteur
+    $inspecteurs = $db->query("SELECT u.id,u.nom,u.prenom,u.code_inspecteur FROM users u WHERE u.cooperative_id=$coopId AND u.role='inspecteur' AND u.actif=1")->fetchAll();
+    foreach ($inspecteurs as &$insp) {
+        $i = $insp['id'];
+        $insp['fiches'] = [
+            'profilage' => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$i")->fetchColumn(),
+            'arbres'    => (int)$db->query("SELECT COUNT(*) FROM fiches_arbres WHERE inspecteur_id=$i")->fetchColumn(),
+            'engrais'   => (int)$db->query("SELECT COUNT(*) FROM fiches_engrais WHERE inspecteur_id=$i")->fetchColumn(),
+            'valide'    => (int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE inspecteur_id=$i AND statut='valide'")->fetchColumn(),
+        ];
+    }
+
+    jsonSuccess(['stats' => [
+        'inspecteurs'      => $inspecteurs,
+        'total_producteurs'=> (int)$db->query("SELECT COUNT(*) FROM producteurs WHERE cooperative_id=$coopId")->fetchColumn(),
+        'fiches_profilage' => ['total'=>(int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE cooperative_id=$coopId")->fetchColumn(),'soumis'=>(int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE cooperative_id=$coopId AND statut='soumis'")->fetchColumn(),'valide'=>(int)$db->query("SELECT COUNT(*) FROM fiches_profilage WHERE cooperative_id=$coopId AND statut='valide'")->fetchColumn()],
+        'fiches_arbres'    => ['total'=>(int)$db->query("SELECT COUNT(*) FROM fiches_arbres fa JOIN producteurs p ON fa.producteur_id=p.id WHERE p.cooperative_id=$coopId")->fetchColumn(),'valide'=>(int)$db->query("SELECT COUNT(*) FROM fiches_arbres fa JOIN producteurs p ON fa.producteur_id=p.id WHERE p.cooperative_id=$coopId AND fa.statut='valide'")->fetchColumn()],
+        'fiches_engrais'   => ['total'=>(int)$db->query("SELECT COUNT(*) FROM fiches_engrais fe JOIN producteurs p ON fe.producteur_id=p.id WHERE p.cooperative_id=$coopId")->fetchColumn(),'valide'=>(int)$db->query("SELECT COUNT(*) FROM fiches_engrais fe JOIN producteurs p ON fe.producteur_id=p.id WHERE p.cooperative_id=$coopId AND fe.statut='valide'")->fetchColumn()],
+        'enfants_risque'   => (int)$db->query("SELECT COUNT(*) FROM enfants_menage em JOIN fiches_profilage fp ON em.fiche_profilage_id=fp.id WHERE fp.cooperative_id=$coopId AND JSON_LENGTH(em.travaux_effectues)>0")->fetchColumn(),
+    ]]);
+}

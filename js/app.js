@@ -121,21 +121,44 @@ function initApp() {
   if (USER.code_inspecteur) document.getElementById('profileCode').textContent = USER.code_inspecteur;
 
   // Role-based UI
-  if (USER.role === 'admin') {
-    document.getElementById('adminStats').style.display  = 'block';
-    document.getElementById('inspStats').style.display   = 'none';
-    document.getElementById('nav-collect').style.display = 'none';
-    document.getElementById('nav-manage').style.display  = 'flex';
+  if (USER.role === 'superadmin') {
+    // Superadmin interface
+    document.getElementById('adminStats').style.display   = 'none';
+    document.getElementById('inspStats').style.display    = 'none';
+    document.getElementById('nav-home').style.display     = 'none';
+    document.getElementById('nav-collect').style.display  = 'none';
+    document.getElementById('nav-manage').style.display   = 'none';
+    document.getElementById('nav-fiches').style.display   = 'none';
+    document.getElementById('nav-profile').style.display  = 'none';
+    // Show superadmin nav buttons
+    ['nav-sa-home','nav-sa-requests','nav-sa-coops'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'flex';
+    });
+    showPage('sa-home');
+    loadSADashboard();
+  } else if (USER.role === 'admin') {
+    document.getElementById('adminStats').style.display       = 'block';
+    document.getElementById('inspStats').style.display        = 'none';
+    document.getElementById('nav-home').style.display         = 'none';
+    document.getElementById('nav-collect').style.display      = 'none';
+    document.getElementById('nav-manage').style.display       = 'flex';
+    document.getElementById('nav-coop-dashboard').style.display = 'flex';
     document.getElementById('ficheAdminFilter').style.display = 'block';
-    document.getElementById('fichesPageTitle').textContent = 'Validation des fiches';
-    loadDashboard();
+    document.getElementById('fichesPageTitle').textContent    = 'Fiches de ma coopérative';
+    showPage('coop-dashboard');
+    loadCoopDashboard();
   } else {
-    document.getElementById('adminStats').style.display  = 'none';
-    document.getElementById('inspStats').style.display   = 'block';
-    document.getElementById('nav-collect').style.display = 'flex';
-    document.getElementById('nav-manage').style.display  = 'none';
-    document.getElementById('fichesPageTitle').textContent = 'Mes fiches';
-    loadMyFiches();
+    // Inspecteur
+    document.getElementById('adminStats').style.display          = 'none';
+    document.getElementById('inspStats').style.display           = 'block';
+    document.getElementById('nav-home').style.display            = 'none';
+    document.getElementById('nav-collect').style.display         = 'flex';
+    document.getElementById('nav-manage').style.display          = 'none';
+    document.getElementById('nav-insp-dashboard').style.display  = 'flex';
+    document.getElementById('fichesPageTitle').textContent       = 'Mes fiches';
+    showPage('insp-dashboard');
+    loadInspDashboard();
   }
 
   document.getElementById('aiFab').style.display = 'flex';
@@ -161,7 +184,12 @@ function showPage(id) {
   // Scroll to top
   document.getElementById('appBody').scrollTo(0, 0);
   // Load data
-  if (id === 'home')    { USER.role==='admin' ? loadDashboard() : loadMyFiches(); }
+  if (id === 'sa-home')        { loadSADashboard(); }
+  if (id === 'sa-requests')    { loadRequests(currentReqFilter, true); }
+  if (id === 'sa-coops')       { loadSACoops(); }
+  if (id === 'coop-dashboard') { loadCoopDashboard(); }
+  if (id === 'insp-dashboard') { loadInspDashboard(); }
+  if (id === 'home')           { USER.role==='admin' ? loadDashboard() : loadMyFiches(); }
   if (id === 'fiches')  { loadCurrentFiches(); }
   if (id === 'manage')  { /* loaded on demand */ }
   if (id === 'profile') { updatePendingBadge(); }
@@ -1142,6 +1170,136 @@ async function apiFetch(endpoint, method = 'GET', body = null) {
   }
 }
 
+// ── REGISTER COOPERATIVE ─────────────────────────────────────────
+function showRegisterSheet() {
+  document.getElementById('registerErr').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'block';
+  document.getElementById('registerSuccess').style.display = 'none';
+  document.getElementById('registerFooter').style.display = 'flex';
+  ['regNom','regEmail','regTel','regLoc','regPass','regPass2'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('registerOverlay').classList.add('open');
+  document.getElementById('registerSheet').classList.add('open');
+}
+function closeRegisterSheet() {
+  document.getElementById('registerOverlay').classList.remove('open');
+  document.getElementById('registerSheet').classList.remove('open');
+}
+async function submitRegister() {
+  const nom=document.getElementById('regNom').value.trim(),email=document.getElementById('regEmail').value.trim();
+  const tel=document.getElementById('regTel').value.trim(),loc=document.getElementById('regLoc').value.trim();
+  const pass=document.getElementById('regPass').value,pass2=document.getElementById('regPass2').value;
+  const errEl=document.getElementById('registerErr');
+  errEl.style.display='none';
+  if(!nom||!email||!pass){errEl.textContent='Nom, email et mot de passe requis';errEl.style.display='flex';return;}
+  if(pass!==pass2){errEl.textContent='Les mots de passe ne correspondent pas';errEl.style.display='flex';return;}
+  if(pass.length<6){errEl.textContent='Mot de passe: minimum 6 caractères';errEl.style.display='flex';return;}
+  try {
+    await apiFetch('/cooperative-requests','POST',{nom,email,telephone:tel,localite:loc,password:pass});
+    document.getElementById('registerForm').style.display='none';
+    document.getElementById('registerSuccess').style.display='block';
+    document.getElementById('registerFooter').style.display='none';
+  } catch(e){errEl.textContent=e.message;errEl.style.display='flex';}
+}
+
+// ── SUPERADMIN ────────────────────────────────────────────────────
+let currentReqFilter='en_attente',currentReqId=null;
+
+async function loadSADashboard() {
+  try {
+    const res=await apiFetch('/sa-stats');const s=res.stats;
+    document.getElementById('sa-pending').textContent=s.pending_requests;
+    document.getElementById('sa-coops').textContent=s.total_coops;
+    document.getElementById('sa-users').textContent=s.total_users;
+    document.getElementById('sa-fiches').textContent=s.total_fiches;
+    if(s.pending_requests>0){const b=document.getElementById('requestsBadge');b.style.display='flex';b.textContent=s.pending_requests;}
+    await loadRequests('en_attente',false);
+  } catch(e){console.error(e);}
+}
+
+async function loadRequests(statut='en_attente',updateContainer=true) {
+  currentReqFilter=statut;
+  const container=document.getElementById(updateContainer?'requestsList':'saLatestRequests');
+  try {
+    const url=statut?`/cooperative-requests?statut=${statut}`:'/cooperative-requests';
+    const res=await apiFetch(url);const data=res.data||[];
+    if(!data.length){container.innerHTML=`<div class="empty-state"><div class="es-icon">📋</div><div class="es-title">Aucune demande</div></div>`;return;}
+    container.innerHTML=data.map(r=>`
+      <div class="list-item" onclick="openRequestDetail(${r.id})">
+        <div class="li-icon" style="background:${r.statut==='en_attente'?'var(--a100)':r.statut==='valide'?'var(--g100)':'var(--r100)'}">
+          ${r.statut==='en_attente'?'⏳':r.statut==='valide'?'✅':'❌'}
+        </div>
+        <div class="li-body">
+          <div class="li-title">${r.nom}</div>
+          <div class="li-sub">${r.email} • ${r.localite||''} • ${timeAgo(r.created_at)}</div>
+        </div>
+        <div class="li-right">${saStatusBadge(r.statut)}</div>
+      </div>`).join('');
+  } catch(e){container.innerHTML=`<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-title">${e.message}</div></div>`;}
+}
+
+async function filterRequests(statut,btn) {
+  document.querySelectorAll('[id^="req-tab-"]').forEach(b=>b.className='btn btn-sm btn-secondary');
+  btn.className='btn btn-sm btn-primary';
+  await loadRequests(statut,true);
+}
+
+async function openRequestDetail(id) {
+  currentReqId=id;
+  try {
+    const res=await apiFetch('/cooperative-requests');
+    const r=(res.data||[]).find(x=>x.id==id);if(!r)return;
+    document.getElementById('reqDetailTitle').textContent=r.nom;
+    document.getElementById('reqDetailBody').innerHTML=`
+      <div class="card" style="margin-bottom:16px"><div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Coopérative</div><div style="font-weight:700">${r.nom}</div></div>
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Email</div><div>${r.email}</div></div>
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Téléphone</div><div>${r.telephone||'Non renseigné'}</div></div>
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Localité</div><div>${r.localite||'Non renseignée'}</div></div>
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Date</div><div>${new Date(r.created_at).toLocaleDateString('fr-FR')}</div></div>
+          <div><div style="font-size:11px;color:var(--gray400);font-weight:600;text-transform:uppercase;margin-bottom:2px">Statut</div><div>${saStatusBadge(r.statut)}</div></div>
+        </div>
+      </div></div>
+      ${r.statut==='en_attente'?'<p style="font-size:13px;color:var(--gray500);text-align:center">Valider créera automatiquement le compte admin de cette coopérative.</p>':''}`;
+    document.getElementById('reqDetailFooter').style.display=r.statut==='en_attente'?'flex':'none';
+    openSheet('reqDetail');
+  } catch(e){toast(e.message,'error');}
+}
+
+async function validateRequest(statut) {
+  if(!currentReqId)return;
+  const msg=statut==='valide'?'Valider cette coopérative ? Un compte admin sera créé.':'Rejeter cette demande ?';
+  if(!confirm(msg))return;
+  try {
+    await apiFetch(`/cooperative-requests/${currentReqId}`,'PUT',{statut});
+    closeSheet('reqDetail');
+    toast(statut==='valide'?'✅ Coopérative validée!':'❌ Demande rejetée',statut==='valide'?'success':'warning');
+    loadSADashboard();loadRequests(currentReqFilter,true);
+  } catch(e){toast(e.message,'error');}
+}
+
+async function loadSACoops() {
+  const container=document.getElementById('saCoopsList');
+  try {
+    const res=await apiFetch('/cooperatives');const data=res.data||[];
+    container.innerHTML=data.length?data.map(c=>`
+      <div class="list-item">
+        <div class="li-icon" style="background:var(--g100)">🏠</div>
+        <div class="li-body"><div class="li-title">${c.nom}</div>
+          <div class="li-sub">${c.email||c.localite||''} • ${c.nb_inspecteurs||0} insp.</div></div>
+        <div class="li-right"><span class="badge badge-green">Active</span></div>
+      </div>`).join(''):`<div class="empty-state"><div class="es-icon">🏠</div><div class="es-title">Aucune coopérative</div></div>`;
+  } catch(e){container.innerHTML=`<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-title">${e.message}</div></div>`;}
+}
+
+function saStatusBadge(s) {
+  const map={en_attente:'badge-amber',valide:'badge-green',rejete:'badge-red'};
+  const lbls={en_attente:'En attente',valide:'Validée',rejete:'Rejetée'};
+  return `<span class="badge ${map[s]||'badge-gray'}">${lbls[s]||s}</span>`;
+}
+
 // ── UTILS ────────────────────────────────────────────────────
 function today() { return new Date().toISOString().split('T')[0]; }
 
@@ -1182,3 +1340,504 @@ document.addEventListener('keydown', e => {
     if (document.getElementById('aiInput') === document.activeElement) sendAI();
   }
 });
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD ADMIN COOPÉRATIVE
+// ══════════════════════════════════════════════════════════════
+async function loadCoopDashboard() {
+  try {
+    const res = await apiFetch('/coop-stats');
+    const s   = res.stats;
+
+    document.getElementById('cs-inspecteurs').textContent = s.inspecteurs.length;
+    document.getElementById('cs-producteurs').textContent = s.total_producteurs;
+    document.getElementById('cs-valides').textContent     = parseInt(s.fiches_profilage.valide) + parseInt(s.fiches_arbres.valide) + parseInt(s.fiches_engrais.valide);
+    document.getElementById('cs-enfants').textContent     = s.enfants_risque;
+
+    // Activité par inspecteur
+    const container = document.getElementById('inspecteurActivityList');
+    if (!s.inspecteurs.length) {
+      container.innerHTML = `<div class="empty-state"><div class="es-icon">👤</div><div class="es-title">Aucun inspecteur</div></div>`;
+      return;
+    }
+    container.innerHTML = s.inspecteurs.map(insp => {
+      const total = insp.fiches.profilage + insp.fiches.arbres + insp.fiches.engrais;
+      const pct   = total > 0 ? Math.round((insp.fiches.valide / total) * 100) : 0;
+      return `
+        <div class="list-item" onclick="viewInspecteurDetail(${insp.id})">
+          <div class="li-icon" style="background:var(--g100);font-weight:800;font-size:14px;color:var(--g800)">
+            ${(insp.prenom[0]||'') + (insp.nom[0]||'')}
+          </div>
+          <div class="li-body">
+            <div class="li-title">${insp.prenom} ${insp.nom}</div>
+            <div class="li-sub">${insp.code_inspecteur||''} • ${total} fiche(s) • ${pct}% validées</div>
+            <div style="background:var(--gray100);border-radius:20px;height:4px;margin-top:6px">
+              <div style="background:var(--g500);height:4px;border-radius:20px;width:${pct}%;transition:width .5s"></div>
+            </div>
+          </div>
+          <div class="chevron"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="16" height="16"><path d="M9 18l6-6-6-6"/></svg></div>
+        </div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function viewInspecteurDetail(inspId) {
+  try {
+    const res = await apiFetch(`/inspecteur-stats/${inspId}`);
+    const s   = res.stats;
+    const insp = await apiFetch(`/users/${inspId}`).catch(() => null);
+
+    openSheet('ficheDetail');
+    document.getElementById('ficheDetailTitle').textContent = 'Activité inspecteur';
+    document.getElementById('ficheDetailBody').innerHTML = `
+      <div class="stat-grid" style="margin-bottom:16px">
+        <div class="stat-card"><div class="icon ic-green"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/></svg></div><div class="val">${s.profilage.valide}</div><div class="lbl">Validées</div></div>
+        <div class="stat-card"><div class="icon ic-amber"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg></div><div class="val">${s.profilage.soumis}</div><div class="lbl">En attente</div></div>
+        <div class="stat-card"><div class="icon ic-blue"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></div><div class="val">${s.total_all}</div><div class="lbl">Total</div></div>
+        <div class="stat-card"><div class="icon ic-green"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="val">${s.ce_mois}</div><div class="lbl">Ce mois</div></div>
+      </div>
+      <div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+        <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:600">👨‍👩‍👧 Profilage</span><span style="font-size:13px;color:var(--gray500)">${s.profilage.total}</span></div>
+          <div style="background:var(--gray100);border-radius:20px;height:6px"><div style="background:var(--g500);height:6px;border-radius:20px;width:${s.profilage.total>0?Math.round(s.profilage.valide/s.profilage.total*100):0}%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:600">🌳 Arbres</span><span style="font-size:13px;color:var(--gray500)">${s.arbres.total}</span></div>
+          <div style="background:var(--gray100);border-radius:20px;height:6px"><div style="background:var(--a500);height:6px;border-radius:20px;width:${s.arbres.total>0?Math.round(s.arbres.valide/s.arbres.total*100):0}%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:600">🧪 Engrais</span><span style="font-size:13px;color:var(--gray500)">${s.engrais.total}</span></div>
+          <div style="background:var(--gray100);border-radius:20px;height:6px"><div style="background:var(--b500);height:6px;border-radius:20px;width:${s.engrais.total>0?Math.round(s.engrais.valide/s.engrais.total*100):0}%"></div></div></div>
+      </div></div>`;
+    document.getElementById('ficheDetailFooter').innerHTML = '';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD INSPECTEUR
+// ══════════════════════════════════════════════════════════════
+async function loadInspDashboard() {
+  try {
+    const res = await apiFetch('/inspecteur-stats');
+    const s   = res.stats;
+
+    document.getElementById('is-valide').textContent = s.profilage.valide;
+    document.getElementById('is-soumis').textContent = s.profilage.soumis;
+    document.getElementById('is-rejete').textContent = s.profilage.rejete;
+    document.getElementById('is-mois').textContent   = s.ce_mois;
+
+    const maxP = Math.max(s.profilage.total, s.arbres.total, s.engrais.total, 1);
+    document.getElementById('is-p-total').textContent = s.profilage.total;
+    document.getElementById('is-a-total').textContent = s.arbres.total;
+    document.getElementById('is-e-total').textContent = s.engrais.total;
+    setTimeout(() => {
+      document.getElementById('is-p-bar').style.width = (s.profilage.total/maxP*100)+'%';
+      document.getElementById('is-a-bar').style.width = (s.arbres.total/maxP*100)+'%';
+      document.getElementById('is-e-bar').style.width = (s.engrais.total/maxP*100)+'%';
+    }, 100);
+
+    // Fiches récentes
+    const ficheRes = await apiFetch('/fiches-profilage');
+    const fiches   = (ficheRes.data||[]).slice(0,5);
+    const container = document.getElementById('inspRecentFiches');
+    container.innerHTML = fiches.length ? fiches.map(f => `
+      <div class="list-item" onclick="openFicheDetail('profilage',${f.id},'${f.statut}')">
+        <div class="li-icon" style="background:var(--g50)">👨‍👩‍👧</div>
+        <div class="li-body">
+          <div class="li-title">${f.prod_nom||'Producteur'}</div>
+          <div class="li-sub">${f.date_profilage} • ${f.nom_communaute||''}</div>
+        </div>
+        <div class="li-right">${statusBadge(f.statut)}</div>
+      </div>`).join('') :
+      `<div class="empty-state"><div class="es-icon">📝</div><div class="es-title">Aucune fiche</div></div>`;
+
+    // Offline count
+    const n = await localDB.getPendingCount();
+    document.getElementById('offlineCount').textContent = `${n} fiche(s) en attente de synchronisation`;
+    document.getElementById('syncBtn').style.display = n > 0 && navigator.onLine ? 'block' : 'none';
+  } catch(e) { console.error(e); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODIFIER / SUPPRIMER FICHE
+// ══════════════════════════════════════════════════════════════
+async function openFicheDetail(type, id, statut) {
+  const eps  = { profilage:'fiches-profilage', arbres:'fiches-arbres', engrais:'fiches-engrais' };
+  const types = { profilage:'👨‍👩‍👧 Profilage', arbres:'🌳 Arbres', engrais:'🧪 Engrais' };
+
+  try {
+    const res   = await apiFetch(`/${eps[type]}`);
+    const fiche = (res.data||[]).find(f => f.id == id);
+    if (!fiche) return toast('Fiche non trouvée', 'error');
+
+    document.getElementById('ficheDetailTitle').textContent = types[type] + ' #' + id;
+
+    // Build detail view
+    let html = `<div class="card" style="margin-bottom:12px"><div class="card-body" style="display:flex;flex-direction:column;gap:10px">`;
+    html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Producteur</span><div style="font-weight:700;margin-top:2px">${fiche.prod_nom||'-'} ${fiche.prod_prenom||''}</div></div>`;
+    html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Inspecteur</span><div style="margin-top:2px">${fiche.insp_prenom||''} ${fiche.insp_nom||'-'}</div></div>`;
+    html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Date</span><div style="margin-top:2px">${fiche.date_profilage||fiche.date_collecte||'-'}</div></div>`;
+    html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Statut</span><div style="margin-top:4px">${statusBadge(fiche.statut)}</div></div>`;
+
+    if (type === 'profilage' && fiche.enfants?.length) {
+      html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Enfants (${fiche.enfants.length})</span>`;
+      fiche.enfants.forEach(e => {
+        html += `<div style="margin-top:6px;padding:8px;background:var(--gray50);border-radius:8px;font-size:13px"><strong>${e.nom_prenom}</strong> • ${e.age} ans • ${e.genre}</div>`;
+      });
+      html += '</div>';
+    }
+
+    if (type === 'arbres') {
+      html += `<div><span style="font-size:11px;font-weight:700;color:var(--gray400);text-transform:uppercase">Arbres d'ombrage</span><div style="margin-top:2px">${fiche.nb_arbres_ombrage} arbres • ${fiche.densite_par_hectare}/ha</div></div>`;
+    }
+
+    if (fiche.commentaire_admin) {
+      html += `<div><span style="font-size:11px;font-weight:700;color:var(--r500);text-transform:uppercase">Commentaire admin</span><div style="margin-top:4px;font-size:13px;color:var(--gray600)">${fiche.commentaire_admin}</div></div>`;
+    }
+    html += '</div></div>';
+    document.getElementById('ficheDetailBody').innerHTML = html;
+
+    // Buttons based on role and status
+    const canEdit = USER.role === 'admin' || USER.role === 'superadmin' ||
+                    (fiche.inspecteur_id == USER.id && ['brouillon','rejete'].includes(fiche.statut));
+    const canDel  = USER.role === 'admin' || USER.role === 'superadmin' ||
+                    (fiche.inspecteur_id == USER.id && ['brouillon','rejete'].includes(fiche.statut));
+    const canValid= USER.role === 'admin' && fiche.statut === 'soumis';
+
+    let footer = '';
+    if (canDel)   footer += `<button class="btn btn-danger" style="flex:1" onclick="deleteFiche('${type}',${id})">🗑️ Supprimer</button>`;
+    if (canEdit)  footer += `<button class="btn btn-secondary" style="flex:1" onclick="editFiche('${type}',${id})">✏️ Modifier</button>`;
+    if (canValid) footer += `<button class="btn btn-primary" style="flex:1" onclick="openValidSheet(${id},'${type}')">✓ Valider</button>`;
+
+    document.getElementById('ficheDetailFooter').innerHTML = footer || '';
+    openSheet('ficheDetail');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteFiche(type, id) {
+  if (!confirm('Supprimer cette fiche définitivement ?')) return;
+  const eps = { profilage:'fiches-profilage', arbres:'fiches-arbres', engrais:'fiches-engrais' };
+  try {
+    await apiFetch(`/${eps[type]}/${id}`, 'DELETE', {});
+    closeSheet('ficheDetail');
+    toast('Fiche supprimée ✓', 'success');
+    loadCurrentFiches();
+    if (USER.role !== 'admin') loadInspDashboard();
+    else loadCoopDashboard();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editFiche(type, id) {
+  // Open the appropriate fiche sheet pre-filled
+  closeSheet('ficheDetail');
+  toast('Fonction de modification disponible prochainement', 'info');
+  // TODO: Open edit sheet with pre-filled data
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT PDF
+// ══════════════════════════════════════════════════════════════
+async function exportPDF(type = 'all', ficheId = null) {
+  toast('Génération du PDF en cours...', 'info');
+  try {
+    const url = ficheId
+      ? `${BASE}/api/export.php?type=${type}&id=${ficheId}`
+      : `${BASE}/api/export.php?type=${type}`;
+
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Erreur export');
+
+    const { jsPDF }    = window.jspdf;
+    const doc          = new jsPDF({ orientation: 'portrait', format: 'a4' });
+    const pageW        = doc.internal.pageSize.getWidth();
+    const today        = new Date().toLocaleDateString('fr-FR');
+    let   y            = 20;
+
+    // Header
+    doc.setFillColor(45, 80, 22);
+    doc.rect(0, 0, pageW, 18, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14); doc.setFont('helvetica','bold');
+    doc.text('IndicatorDATA — Cacao Collector', 10, 12);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text(`Généré le ${today} par ${data.rapport.generated_by}`, pageW - 10, 12, {align:'right'});
+
+    y = 28;
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text(data.rapport.type || 'Rapport', 10, y);
+    y += 10;
+
+    // Process fiches
+    const processFicheProfilage = (fiches) => {
+      if (!fiches?.length) return;
+      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(45,80,22);
+      doc.text('FICHES DE PROFILAGE DES MÉNAGES', 10, y); y += 8;
+      doc.setDrawColor(45,80,22); doc.setLineWidth(0.5); doc.line(10, y, pageW-10, y); y += 8;
+
+      fiches.forEach((f, idx) => {
+        if (y > 250) { doc.addPage(); y = 20; }
+        doc.setTextColor(0,0,0);
+        doc.setFontSize(11); doc.setFont('helvetica','bold');
+        doc.text(`Fiche #${f.id} — ${f.prod_nom||''} ${f.prod_prenom||''}`, 10, y); y += 7;
+        doc.setFontSize(9); doc.setFont('helvetica','normal');
+
+        const details = [
+          ['Producteur', `${f.prod_nom||''} ${f.prod_prenom||''} (${f.prod_code||''})`],
+          ['Genre', f.prod_genre||'-'],
+          ['Coopérative', f.coop_nom||'-'],
+          ['Communauté', f.nom_communaute||'-'],
+          ['Date profilage', f.date_profilage||'-'],
+          ['Inspecteur', `${f.insp_prenom||''} ${f.insp_nom||''}`],
+          ['Membres ménage', `H:${f.nb_membres_hommes||0} F:${f.nb_membres_femmes||0} T:${f.nb_membres_total||0}`],
+          ['Travailleurs', `H:${f.nb_travailleurs_hommes||0} F:${f.nb_travailleurs_femmes||0} T:${f.nb_travailleurs_total||0}`],
+          ['Superficie certifiée', `${f.superficie_certifiee||0} ha`],
+        ];
+
+        details.forEach(([label, val]) => {
+          doc.setFont('helvetica','bold'); doc.text(label + ':', 12, y);
+          doc.setFont('helvetica','normal'); doc.text(String(val), 60, y);
+          y += 5;
+        });
+
+        // Enfants
+        if (f.enfants?.length) {
+          y += 3;
+          doc.setFont('helvetica','bold'); doc.setFontSize(9);
+          doc.text(`Enfants dans le ménage (${f.enfants.length}):`, 12, y); y += 5;
+          const enfantData = f.enfants.map(e => [
+            e.nom_prenom, e.age + ' ans', e.genre,
+            e.etat_scolarisation||'-',
+            e.extrait_naissance||'-',
+            (JSON.parse(e.travaux_effectues||'[]').length > 0) ? '⚠️ Oui' : 'Non'
+          ]);
+          doc.autoTable({
+            startY: y,
+            head: [['Nom', 'Âge', 'Genre', 'Scolarisation', 'Extrait', 'Travaux']],
+            body: enfantData,
+            theme: 'striped',
+            headStyles: { fillColor: [45,80,22], textColor: 255, fontSize: 8 },
+            bodyStyles: { fontSize: 8 },
+            margin: { left: 12, right: 10 },
+          });
+          y = doc.lastAutoTable.finalY + 8;
+        }
+
+        // Separator
+        doc.setDrawColor(200,200,200); doc.setLineWidth(0.3);
+        doc.line(10, y, pageW-10, y); y += 8;
+      });
+    };
+
+    const processFicheArbres = (fiches) => {
+      if (!fiches?.length) return;
+      if (y > 230) { doc.addPage(); y = 20; }
+      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(45,80,22);
+      doc.text("FICHES ARBRES D'OMBRAGE", 10, y); y += 8;
+      doc.setDrawColor(45,80,22); doc.setLineWidth(0.5); doc.line(10, y, pageW-10, y); y += 8;
+
+      const tableData = fiches.map(f => [
+        f.prod_nom||'-', f.insp_nom||'-', f.date_collecte||'-',
+        f.nb_arbres_ombrage||0, (f.densite_par_hectare||0)+'/ha',
+        (f.nb_arbres_deficitaires||0)+'/ha'
+      ]);
+      doc.setTextColor(0,0,0);
+      doc.autoTable({
+        startY: y,
+        head: [['Producteur','Inspecteur','Date','Nb arbres','Densité/ha','Déficit/ha']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [45,80,22], textColor: 255, fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        margin: { left: 10, right: 10 },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    };
+
+    const processFicheEngrais = (fiches) => {
+      if (!fiches?.length) return;
+      if (y > 230) { doc.addPage(); y = 20; }
+      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(45,80,22);
+      doc.text('FICHES ENGRAIS & PESTICIDES', 10, y); y += 8;
+      doc.setDrawColor(45,80,22); doc.setLineWidth(0.5); doc.line(10, y, pageW-10, y); y += 8;
+
+      const tableData = fiches.map(f => [
+        f.prod_nom||'-', f.insp_nom||'-', f.date_collecte||'-',
+        f.organiques?.length||0, f.inorganiques?.length||0, f.pesticides?.length||0
+      ]);
+      doc.setTextColor(0,0,0);
+      doc.autoTable({
+        startY: y,
+        head: [['Producteur','Inspecteur','Date','Organiques','Inorganiques','Pesticides']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [45,80,22], textColor: 255, fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        margin: { left: 10, right: 10 },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    };
+
+    // Render based on type
+    if (type === 'all') {
+      processFicheProfilage(data.rapport.profilage);
+      processFicheArbres(data.rapport.arbres);
+      processFicheEngrais(data.rapport.engrais);
+    } else if (type === 'profilage') {
+      processFicheProfilage(data.rapport.fiches);
+    } else if (type === 'arbres') {
+      processFicheArbres(data.rapport.fiches);
+    } else if (type === 'engrais') {
+      processFicheEngrais(data.rapport.fiches);
+    }
+
+    // Footer on all pages
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8); doc.setTextColor(150,150,150);
+      doc.text(`Page ${i}/${totalPages} — IndicatorDATA Cacao Collector`, pageW/2, 290, {align:'center'});
+    }
+
+    const filename = `cacao-rapport-${type}-${today.replace(/\//g,'-')}.pdf`;
+    doc.save(filename);
+    toast('PDF généré avec succès ✓', 'success');
+  } catch(e) {
+    console.error(e);
+    toast('Erreur PDF: ' + e.message, 'error');
+  }
+}
+
+async function exportRecap() {
+  toast('Génération du récapitulatif...', 'info');
+  try {
+    const [statRes, coopRes] = await Promise.all([
+      apiFetch('/coop-stats').catch(() => null),
+      apiFetch('/cooperatives').catch(() => null)
+    ]);
+
+    const { jsPDF } = window.jspdf;
+    const doc       = new jsPDF({ orientation: 'portrait', format: 'a4' });
+    const pageW     = doc.internal.pageSize.getWidth();
+    const today     = new Date().toLocaleDateString('fr-FR');
+    let   y         = 20;
+
+    // Header
+    doc.setFillColor(45, 80, 22);
+    doc.rect(0, 0, pageW, 18, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(14); doc.setFont('helvetica','bold');
+    doc.text('IndicatorDATA — Rapport Récapitulatif', 10, 12);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text(today, pageW-10, 12, {align:'right'});
+
+    y = 28;
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('Rapport Récapitulatif d\'Activité', 10, y); y += 12;
+
+    if (statRes?.stats) {
+      const s = statRes.stats;
+
+      // Summary table
+      doc.autoTable({
+        startY: y,
+        head: [['Indicateur', 'Valeur']],
+        body: [
+          ['Nombre d\'inspecteurs actifs', s.inspecteurs?.length || 0],
+          ['Nombre de producteurs', s.total_producteurs || 0],
+          ['Fiches profilage — Total', s.fiches_profilage?.total || 0],
+          ['Fiches profilage — Validées', s.fiches_profilage?.valide || 0],
+          ['Fiches profilage — En attente', s.fiches_profilage?.soumis || 0],
+          ['Fiches arbres — Total', s.fiches_arbres?.total || 0],
+          ['Fiches arbres — Validées', s.fiches_arbres?.valide || 0],
+          ['Fiches engrais — Total', s.fiches_engrais?.total || 0],
+          ['Fiches engrais — Validées', s.fiches_engrais?.valide || 0],
+          ['Enfants en activité agricole', s.enfants_risque || 0],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [45,80,22], textColor: 255 },
+        margin: { left: 10, right: 10 },
+      });
+      y = doc.lastAutoTable.finalY + 15;
+
+      // Inspecteurs table
+      if (s.inspecteurs?.length) {
+        doc.setFontSize(12); doc.setFont('helvetica','bold');
+        doc.text('Activité par inspecteur', 10, y); y += 8;
+        doc.autoTable({
+          startY: y,
+          head: [['Inspecteur','Code','Profilage','Arbres','Engrais','Validées']],
+          body: s.inspecteurs.map(i => [
+            `${i.prenom} ${i.nom}`, i.code_inspecteur||'-',
+            i.fiches.profilage, i.fiches.arbres, i.fiches.engrais, i.fiches.valide
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [45,80,22], textColor: 255, fontSize: 9 },
+          bodyStyles: { fontSize: 9 },
+          margin: { left: 10, right: 10 },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      }
+    }
+
+    // Footer
+    doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text(`IndicatorDATA Cacao Collector — ${today}`, pageW/2, 290, {align:'center'});
+
+    doc.save(`cacao-recap-${today.replace(/\//g,'-')}.pdf`);
+    toast('Récapitulatif PDF généré ✓', 'success');
+  } catch(e) {
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function openExportSheet() {
+  openSheet('export');
+  await loadExportList();
+}
+
+async function loadExportList() {
+  const type   = document.getElementById('exportType')?.value || 'profilage';
+  const select = document.getElementById('exportFicheId');
+  const eps    = { profilage:'fiches-profilage', arbres:'fiches-arbres', engrais:'fiches-engrais' };
+  select.innerHTML = '<option value="">Chargement...</option>';
+  try {
+    const res  = await apiFetch(`/${eps[type]}?statut=valide`);
+    const data = res.data || [];
+    if (!data.length) { select.innerHTML = '<option value="">Aucune fiche validée</option>'; return; }
+    select.innerHTML = '<option value="">Sélectionner une fiche...</option>' +
+      data.map(f => `<option value="${f.id}">#${f.id} — ${f.prod_nom||''} (${f.date_profilage||f.date_collecte||''})</option>`).join('');
+  } catch(e) { select.innerHTML = '<option value="">Erreur de chargement</option>'; }
+}
+
+async function exportSinglePDF() {
+  const type = document.getElementById('exportType')?.value;
+  const id   = document.getElementById('exportFicheId')?.value;
+  if (!id) return toast('Sélectionnez une fiche', 'error');
+  closeSheet('export');
+  await exportPDF(type, id);
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODE HORS LIGNE COMPLET
+// ══════════════════════════════════════════════════════════════
+// Override apiFetch to save locally when offline (POST/PUT)
+const _origApiFetch = apiFetch;
+window.apiFetch = async function(endpoint, method = 'GET', body = null) {
+  // For GET requests or when online, use normal fetch
+  if (method === 'GET' || navigator.onLine) {
+    return _origApiFetch(endpoint, method, body);
+  }
+
+  // Offline: queue mutations locally
+  if (['POST','PUT','DELETE'].includes(method)) {
+    // Only queue fiche submissions
+    if (endpoint.includes('fiches-')) {
+      const localId = await localDB.queueRequest(endpoint, method, body);
+      updatePendingBadge();
+      return { success: true, offline: true, localId, message: 'Sauvegardé hors ligne' };
+    }
+    // Other mutations fail gracefully offline
+    throw new Error('Connexion requise pour cette action');
+  }
+
+  // Offline GET: try cache
+  return _origApiFetch(endpoint, method, body);
+};
