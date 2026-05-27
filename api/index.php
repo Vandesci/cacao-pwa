@@ -54,10 +54,15 @@ $resourceMap = [
     'fiches-profilage' => 'fiches-profilage',
     'fiches-arbres'    => 'fiches-arbres',
     'fiches-engrais'   => 'fiches-engrais',
-    'ai-chat'          => 'ai-chat',
-    'ai-analyze'       => 'ai-analyze',
-    'ai-report'        => 'ai-report',
-    'ai-anomalies'     => 'ai-anomalies',
+    'ai-chat'               => 'ai-chat',
+    'ai-analyze'            => 'ai-analyze',
+    'ai-report'             => 'ai-report',
+    'ai-anomalies'          => 'ai-anomalies',
+    'cooperative-requests'  => 'cooperative-requests',
+    'sa-stats'              => 'sa-stats',
+    'coop-stats'            => 'coop-stats',
+    'inspecteur-stats'      => 'inspecteur-stats',
+    'fiche-delete'          => 'fiche-delete',
 ];
 $resource = $resourceMap[strtolower($resource)] ?? $resource;
 
