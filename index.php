@@ -34,9 +34,13 @@ if ($local === 'api' || strpos($local, 'api/') === 0) {
     exit;
 }
 
-// ── Setup ──────────────────────────────────────────────────
+// ── Setup & Migration ─────────────────────────────────────
 if ($local === 'setup.php') {
     include __DIR__ . '/setup.php';
+    exit;
+}
+if ($local === 'migrate.php') {
+    include __DIR__ . '/migrate.php';
     exit;
 }
 
