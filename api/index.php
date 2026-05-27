@@ -32,9 +32,11 @@ if (empty($apiPath)) {
 }
 
 $parts    = $apiPath ? explode('/', $apiPath) : [];
+// Nettoyer les query strings des segments
+$parts    = array_map(function($p) { return explode('?', $p)[0]; }, $parts);
 $resource = $parts[0] ?? '';
 $action   = $parts[1] ?? '';
-$id       = isset($parts[2]) ? explode('?', $parts[2])[0] : null;
+$id       = $parts[2] ?? null;
 if (!$id && !empty($parts[1]) && is_numeric($parts[1])) {
     $id     = $parts[1];
     $action = '';
@@ -152,6 +154,88 @@ if ($resource === 'cooperative-requests' && $method === 'POST' && empty($action)
     } catch(Exception $e) {}
 
     jsonSuccess([], 'Demande envoyée avec succès');
+}
+
+// ── DEMANDES INSCRIPTION COOPERATIVE ──────────────────────
+if ($resource === 'cooperative-requests') {
+    $db = getDB();
+
+    // Liste (superadmin) ou soumettre (public via POST sans auth)
+    if ($method === 'GET') {
+        requireLogin();
+        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
+        $statut = $_GET['statut'] ?? '';
+        $sql = "SELECT * FROM cooperative_requests WHERE 1=1";
+        $params = [];
+        if ($statut) { $sql .= " AND statut=?"; $params[] = $statut; }
+        $sql .= " ORDER BY created_at DESC";
+        $stmt = $db->prepare($sql); $stmt->execute($params);
+        jsonSuccess(['data' => $stmt->fetchAll()]);
+    }
+
+    // Soumettre une demande (public - pas besoin d'être connecté)
+    if ($method === 'POST' && $action === '') {
+        $nom      = trim($body['nom'] ?? '');
+        $email    = trim($body['email'] ?? '');
+        $password = $body['password'] ?? '';
+        $tel      = $body['telephone'] ?? '';
+        $loc      = $body['localite'] ?? '';
+
+        if (!$nom || !$email || !$password) jsonError('Nom, email et mot de passe requis');
+        if (strlen($password) < 6) jsonError('Mot de passe: minimum 6 caractères');
+
+        // Vérifier email unique
+        $exist = $db->prepare("SELECT id FROM cooperative_requests WHERE email=?");
+        $exist->execute([$email]);
+        if ($exist->fetch()) jsonError('Cet email est déjà utilisé pour une demande');
+
+        $exist2 = $db->prepare("SELECT id FROM users WHERE email=?");
+        $exist2->execute([$email]);
+        if ($exist2->fetch()) jsonError('Cet email est déjà associé à un compte');
+
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $db->prepare("INSERT INTO cooperative_requests (nom,email,telephone,localite,password_hash) VALUES (?,?,?,?,?)")
+           ->execute([$nom, $email, $tel, $loc, $hash]);
+
+        // Notifier les superadmins
+        $admins = $db->query("SELECT id FROM users WHERE role='superadmin'")->fetchAll();
+        foreach ($admins as $a) {
+            $db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")
+               ->execute([$a['id'], 'new_request', "Nouvelle demande d'inscription: $nom ($email)"]);
+        }
+
+        jsonSuccess([], 'Demande envoyée avec succès');
+    }
+
+    // Valider ou rejeter (superadmin)
+    if ($method === 'PUT' && $id) {
+        requireLogin();
+        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
+
+        $statut = $body['statut'] ?? '';
+        $db->prepare("UPDATE cooperative_requests SET statut=?, validated_at=NOW(), validated_by=? WHERE id=?")
+           ->execute([$statut, $_SESSION['user_id'], $id]);
+
+        if ($statut === 'valide') {
+            // Créer la coopérative
+            $req = $db->prepare("SELECT * FROM cooperative_requests WHERE id=?");
+            $req->execute([$id]);
+            $r = $req->fetch();
+
+            $code = 'COOP-' . strtoupper(substr(md5($r['email'].time()), 0, 6));
+            $db->prepare("INSERT INTO cooperatives (nom,email,telephone,localite,code,statut) VALUES (?,?,?,?,?,'active')")
+               ->execute([$r['nom'], $r['email'], $r['telephone'], $r['localite'], $code]);
+            $coopId = $db->lastInsertId();
+
+            // Créer le compte admin de la coopérative
+            $db->prepare("INSERT INTO users (nom,prenom,email,password,role,cooperative_id,is_coop_admin,actif) VALUES (?,?,?,?,'admin',?,1,1)")
+               ->execute([$r['nom'], 'Admin', $r['email'], $r['password_hash'], $coopId]);
+
+            jsonSuccess(['coop_id' => $coopId], 'Coopérative validée et compte créé');
+        } else {
+            jsonSuccess([], 'Demande rejetée');
+        }
+    }
 }
 
 requireLogin();
@@ -513,88 +597,6 @@ if ($resource === 'ai-anomalies') {
 }
 
 jsonError('Ressource non trouvée: ' . $resource, 404);
-
-// ── DEMANDES INSCRIPTION COOPERATIVE ──────────────────────
-if ($resource === 'cooperative-requests') {
-    $db = getDB();
-
-    // Liste (superadmin) ou soumettre (public via POST sans auth)
-    if ($method === 'GET') {
-        requireLogin();
-        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
-        $statut = $_GET['statut'] ?? '';
-        $sql = "SELECT * FROM cooperative_requests WHERE 1=1";
-        $params = [];
-        if ($statut) { $sql .= " AND statut=?"; $params[] = $statut; }
-        $sql .= " ORDER BY created_at DESC";
-        $stmt = $db->prepare($sql); $stmt->execute($params);
-        jsonSuccess(['data' => $stmt->fetchAll()]);
-    }
-
-    // Soumettre une demande (public - pas besoin d'être connecté)
-    if ($method === 'POST' && $action === '') {
-        $nom      = trim($body['nom'] ?? '');
-        $email    = trim($body['email'] ?? '');
-        $password = $body['password'] ?? '';
-        $tel      = $body['telephone'] ?? '';
-        $loc      = $body['localite'] ?? '';
-
-        if (!$nom || !$email || !$password) jsonError('Nom, email et mot de passe requis');
-        if (strlen($password) < 6) jsonError('Mot de passe: minimum 6 caractères');
-
-        // Vérifier email unique
-        $exist = $db->prepare("SELECT id FROM cooperative_requests WHERE email=?");
-        $exist->execute([$email]);
-        if ($exist->fetch()) jsonError('Cet email est déjà utilisé pour une demande');
-
-        $exist2 = $db->prepare("SELECT id FROM users WHERE email=?");
-        $exist2->execute([$email]);
-        if ($exist2->fetch()) jsonError('Cet email est déjà associé à un compte');
-
-        $hash = password_hash($password, PASSWORD_BCRYPT);
-        $db->prepare("INSERT INTO cooperative_requests (nom,email,telephone,localite,password_hash) VALUES (?,?,?,?,?)")
-           ->execute([$nom, $email, $tel, $loc, $hash]);
-
-        // Notifier les superadmins
-        $admins = $db->query("SELECT id FROM users WHERE role='superadmin'")->fetchAll();
-        foreach ($admins as $a) {
-            $db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")
-               ->execute([$a['id'], 'new_request', "Nouvelle demande d'inscription: $nom ($email)"]);
-        }
-
-        jsonSuccess([], 'Demande envoyée avec succès');
-    }
-
-    // Valider ou rejeter (superadmin)
-    if ($method === 'PUT' && $id) {
-        requireLogin();
-        if ($_SESSION['role'] !== 'superadmin') jsonError('Accès refusé', 403);
-
-        $statut = $body['statut'] ?? '';
-        $db->prepare("UPDATE cooperative_requests SET statut=?, validated_at=NOW(), validated_by=? WHERE id=?")
-           ->execute([$statut, $_SESSION['user_id'], $id]);
-
-        if ($statut === 'valide') {
-            // Créer la coopérative
-            $req = $db->prepare("SELECT * FROM cooperative_requests WHERE id=?");
-            $req->execute([$id]);
-            $r = $req->fetch();
-
-            $code = 'COOP-' . strtoupper(substr(md5($r['email'].time()), 0, 6));
-            $db->prepare("INSERT INTO cooperatives (nom,email,telephone,localite,code,statut) VALUES (?,?,?,?,?,'active')")
-               ->execute([$r['nom'], $r['email'], $r['telephone'], $r['localite'], $code]);
-            $coopId = $db->lastInsertId();
-
-            // Créer le compte admin de la coopérative
-            $db->prepare("INSERT INTO users (nom,prenom,email,password,role,cooperative_id,is_coop_admin,actif) VALUES (?,?,?,?,'admin',?,1,1)")
-               ->execute([$r['nom'], 'Admin', $r['email'], $r['password_hash'], $coopId]);
-
-            jsonSuccess(['coop_id' => $coopId], 'Coopérative validée et compte créé');
-        } else {
-            jsonSuccess([], 'Demande rejetée');
-        }
-    }
-}
 
 // ── SUPERADMIN STATS ───────────────────────────────────────
 if ($resource === 'sa-stats') {
