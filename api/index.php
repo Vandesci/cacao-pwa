@@ -95,6 +95,9 @@ if ($resource === 'auth') {
             $_SESSION['prenom']         = $user['prenom'];
             $_SESSION['role']           = $user['role'];
             $_SESSION['cooperative_id'] = $user['cooperative_id'];
+            // Forcer l'écriture de la session
+            session_write_close();
+            session_start();
             jsonSuccess(['user' => [
                 'id'             => $user['id'],
                 'nom'            => $user['nom'],

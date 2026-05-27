@@ -1137,12 +1137,20 @@ async function checkAnomalies() {
 
 // ── API HELPER ────────────────────────────────────────────────
 async function apiFetch(endpoint, method = 'GET', body = null) {
-  // Utilise le chemin direct dans l'URL - évite la traduction automatique du navigateur
+  // Utilise le chemin direct dans l'URL
   const path    = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
   const baseUrl = BASE + '/api' + path;
-  const opts    = {
+  const headers = { 'Content-Type': 'application/json' };
+  // Envoyer les infos utilisateur pour Railway (sessions stateless)
+  if (USER && USER.id) {
+    headers['X-User-Id']   = String(USER.id);
+    headers['X-User-Role'] = USER.role || '';
+    headers['X-Coop-Id']   = String(USER.cooperative_id || '');
+  }
+  const opts = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers,
   };
   if (body && method !== 'GET') opts.body = JSON.stringify(body);
 

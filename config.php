@@ -46,23 +46,54 @@ function getDB() {
 
 // ── SESSION ────────────────────────────────────────────────
 if (session_status() === PHP_SESSION_NONE) {
+    // Configuration session compatible Railway
+    ini_set('session.cookie_samesite', 'None');
+    ini_set('session.cookie_secure', IS_RAILWAY ? '1' : '0');
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_lifetime', '86400');
+    ini_set('session.gc_maxlifetime', '86400');
+    ini_set('session.cookie_path', '/');
+    
     session_set_cookie_params([
         'lifetime' => 86400,
         'path'     => '/',
-        'secure'   => IS_RAILWAY, // HTTPS sur Railway
+        'secure'   => IS_RAILWAY,
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => IS_RAILWAY ? 'None' : 'Lax',
     ]);
     session_start();
 }
 
-function isLoggedIn()  { return !empty($_SESSION['user_id']); }
+function isLoggedIn() {
+    // Check session first, then header fallback for Railway
+    if (!empty($_SESSION['user_id'])) return true;
+    // Header-based auth for stateless Railway deployments
+    $userId = $_SERVER['HTTP_X_USER_ID'] ?? '';
+    if (!empty($userId) && is_numeric($userId)) {
+        // Reload session from DB
+        try {
+            $db   = getDB();
+            $stmt = $db->prepare("SELECT * FROM users WHERE id=? AND actif=1");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch();
+            if ($user) {
+                $_SESSION['user_id']        = $user['id'];
+                $_SESSION['nom']            = $user['nom'];
+                $_SESSION['prenom']         = $user['prenom'];
+                $_SESSION['role']           = $user['role'];
+                $_SESSION['cooperative_id'] = $user['cooperative_id'];
+                return true;
+            }
+        } catch(Exception $e) {}
+    }
+    return false;
+}
 function requireLogin() {
     if (!isLoggedIn()) jsonError('Non authentifié', 401);
 }
 function requireAdmin() {
     requireLogin();
-    if ($_SESSION['role'] !== 'admin') jsonError('Accès refusé', 403);
+    if (!in_array($_SESSION['role'], ['admin','superadmin'])) jsonError('Accès refusé', 403);
 }
 function currentUser() {
     return [
