@@ -1818,26 +1818,25 @@ async function exportSinglePDF() {
 // ══════════════════════════════════════════════════════════════
 // MODE HORS LIGNE COMPLET
 // ══════════════════════════════════════════════════════════════
-// Override apiFetch to save locally when offline (POST/PUT)
+// Offline queue for fiche submissions only
 const _origApiFetch = apiFetch;
 window.apiFetch = async function(endpoint, method = 'GET', body = null) {
-  // For GET requests or when online, use normal fetch
-  if (method === 'GET' || navigator.onLine) {
+  // Always try network first for non-fiche or when online
+  if (method === 'GET' || navigator.onLine || !endpoint.includes('fiches-')) {
     return _origApiFetch(endpoint, method, body);
   }
 
-  // Offline: queue mutations locally
-  if (['POST','PUT','DELETE'].includes(method)) {
-    // Only queue fiche submissions
-    if (endpoint.includes('fiches-')) {
+  // Only queue fiche POST submissions when truly offline
+  if (method === 'POST' && endpoint.includes('fiches-')) {
+    try {
+      return await _origApiFetch(endpoint, method, body);
+    } catch(e) {
+      // Network failed - queue locally
       const localId = await localDB.queueRequest(endpoint, method, body);
       updatePendingBadge();
       return { success: true, offline: true, localId, message: 'Sauvegardé hors ligne' };
     }
-    // Other mutations fail gracefully offline
-    throw new Error('Connexion requise pour cette action');
   }
 
-  // Offline GET: try cache
   return _origApiFetch(endpoint, method, body);
 };
