@@ -110,6 +110,42 @@ if ($resource === 'auth') {
     jsonError('Auth endpoint inconnu: ' . $action);
 }
 
+// ── DEMANDE INSCRIPTION (public - pas besoin d'auth) ──────
+if ($resource === 'cooperative-requests' && $method === 'POST' && empty($action)) {
+    $db       = getDB();
+    $nom      = trim($body['nom'] ?? '');
+    $email    = trim($body['email'] ?? '');
+    $password = $body['password'] ?? '';
+    $tel      = $body['telephone'] ?? '';
+    $loc      = $body['localite'] ?? '';
+
+    if (!$nom || !$email || !$password) jsonError('Nom, email et mot de passe requis');
+    if (strlen($password) < 6) jsonError('Mot de passe: minimum 6 caractères');
+
+    $exist = $db->prepare("SELECT id FROM cooperative_requests WHERE email=?");
+    $exist->execute([$email]);
+    if ($exist->fetch()) jsonError('Cet email est déjà utilisé pour une demande');
+
+    $exist2 = $db->prepare("SELECT id FROM users WHERE email=?");
+    $exist2->execute([$email]);
+    if ($exist2->fetch()) jsonError('Cet email est déjà associé à un compte');
+
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+    $db->prepare("INSERT INTO cooperative_requests (nom,email,telephone,localite,password_hash) VALUES (?,?,?,?,?)")
+       ->execute([$nom, $email, $tel, $loc, $hash]);
+
+    // Notifier les superadmins
+    try {
+        $admins = $db->query("SELECT id FROM users WHERE role='superadmin'")->fetchAll();
+        foreach ($admins as $a) {
+            $db->prepare("INSERT INTO notifications (user_id,type,message) VALUES (?,?,?)")
+               ->execute([$a['id'], 'new_request', "Nouvelle demande d'inscription: $nom ($email)"]);
+        }
+    } catch(Exception $e) {}
+
+    jsonSuccess([], 'Demande envoyée avec succès');
+}
+
 requireLogin();
 $user = currentUser();
 
