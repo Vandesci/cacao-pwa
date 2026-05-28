@@ -19,7 +19,7 @@ if ($pos !== false) {
 $local = trim($local, '/');
 
 // ── Fichiers spéciaux PHP ─────────────────────────────────
-$phpFiles = ['setup.php', 'migrate.php', 'ping.php'];
+$phpFiles = ['setup.php', 'migrate.php', 'reset_pass.php', 'ping.php'];
 foreach ($phpFiles as $f) {
     if ($local === $f && file_exists(__DIR__ . '/' . $f)) {
         include __DIR__ . '/' . $f;

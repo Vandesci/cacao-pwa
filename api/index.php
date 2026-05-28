@@ -121,7 +121,9 @@ if ($resource === 'cooperative-requests') {
             $code = 'COOP-'.strtoupper(substr(md5($r['email'].time()),0,6));
             db()->prepare("INSERT INTO cooperatives (nom,localite,code,email,telephone) VALUES (?,?,?,?,?)")->execute([$r['nom'],$r['localite']??'',$code,$r['email'],$r['telephone']??'']);
             $coopId = db()->lastInsertId();
-            db()->prepare("INSERT INTO users (nom,prenom,email,password,role,cooperative_id,is_coop_admin,actif) VALUES (?,?,?,?,'admin',?,1,1)")->execute([$r['nom'],'Admin',$r['email'],$r['password_hash'],$coopId]);
+            // Le password_hash est déjà hashé lors de l'inscription - on l'utilise directement
+            db()->prepare("INSERT INTO users (nom,prenom,email,password,role,cooperative_id,is_coop_admin,actif) VALUES (?,?,?,?,'admin',?,1,1)")
+               ->execute([$r['nom'], 'Admin', $r['email'], $r['password_hash'], $coopId]);
             jsonSuccess(['coop_id'=>$coopId], 'Coopérative validée et compte admin créé');
         }
         jsonSuccess([], 'Demande mise à jour');
