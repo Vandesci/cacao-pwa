@@ -120,43 +120,49 @@ function initApp() {
   document.getElementById('profileRole').textContent   = USER.role === 'admin' ? '👑 Administrateur' : '🔍 Inspecteur';
   if (USER.code_inspecteur) document.getElementById('profileCode').textContent = USER.code_inspecteur;
 
-  // Role-based UI
+  // ── Cacher TOUT d'abord ──────────────────────────────
+  const allNavIds = ['nav-home','nav-fiches','nav-collect','nav-manage','nav-profile',
+                     'nav-sa-home','nav-sa-requests','nav-sa-coops',
+                     'nav-coop-dashboard','nav-insp-dashboard'];
+  allNavIds.forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
+  const adminStats = document.getElementById('adminStats');
+  const inspStats  = document.getElementById('inspStats');
+  if (adminStats) adminStats.style.display = 'none';
+  if (inspStats)  inspStats.style.display  = 'none';
+
+  // ── Interface selon le rôle ────────────────────────
   if (USER.role === 'superadmin') {
-    // Superadmin interface
-    document.getElementById('adminStats').style.display   = 'none';
-    document.getElementById('inspStats').style.display    = 'none';
-    document.getElementById('nav-home').style.display     = 'none';
-    document.getElementById('nav-collect').style.display  = 'none';
-    document.getElementById('nav-manage').style.display   = 'none';
-    document.getElementById('nav-fiches').style.display   = 'none';
-    document.getElementById('nav-profile').style.display  = 'none';
-    // Show superadmin nav buttons
+    // SUPERADMIN : Dashboard global + Demandes + Coopératives
     ['nav-sa-home','nav-sa-requests','nav-sa-coops'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'flex';
     });
     showPage('sa-home');
     loadSADashboard();
+
   } else if (USER.role === 'admin') {
-    document.getElementById('adminStats').style.display       = 'block';
-    document.getElementById('inspStats').style.display        = 'none';
-    document.getElementById('nav-home').style.display         = 'none';
-    document.getElementById('nav-collect').style.display      = 'none';
-    document.getElementById('nav-manage').style.display       = 'flex';
-    document.getElementById('nav-coop-dashboard').style.display = 'flex';
-    document.getElementById('ficheAdminFilter').style.display = 'block';
-    document.getElementById('fichesPageTitle').textContent    = 'Fiches de ma coopérative';
+    // ADMIN COOP : Dashboard coop + Fiches + Gestion + Profil
+    if (adminStats) adminStats.style.display = 'block';
+    ['nav-coop-dashboard','nav-fiches','nav-manage','nav-profile'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'flex';
+    });
+    const ficheFilter = document.getElementById('ficheAdminFilter');
+    const fichesTitle = document.getElementById('fichesPageTitle');
+    if (ficheFilter) ficheFilter.style.display = 'block';
+    if (fichesTitle) fichesTitle.textContent   = 'Fiches de ma coopérative';
     showPage('coop-dashboard');
     loadCoopDashboard();
+
   } else {
-    // Inspecteur
-    document.getElementById('adminStats').style.display          = 'none';
-    document.getElementById('inspStats').style.display           = 'block';
-    document.getElementById('nav-home').style.display            = 'none';
-    document.getElementById('nav-collect').style.display         = 'flex';
-    document.getElementById('nav-manage').style.display          = 'none';
-    document.getElementById('nav-insp-dashboard').style.display  = 'flex';
-    document.getElementById('fichesPageTitle').textContent       = 'Mes fiches';
+    // INSPECTEUR : Dashboard perso + Collecte + Fiches + Profil
+    if (inspStats) inspStats.style.display = 'block';
+    ['nav-insp-dashboard','nav-collect','nav-fiches','nav-profile'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'flex';
+    });
+    const fichesTitle = document.getElementById('fichesPageTitle');
+    if (fichesTitle) fichesTitle.textContent = 'Mes fiches';
     showPage('insp-dashboard');
     loadInspDashboard();
   }
@@ -175,14 +181,15 @@ const PAGE_TITLES = {
 
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('show'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => { if(b.style.display!=='none') b.classList.remove('active'); });
   const page = document.getElementById('page-' + id);
   const nav  = document.getElementById('nav-' + id);
   if (page) page.classList.add('show');
-  if (nav)  nav.classList.add('active');
-  document.getElementById('topbarTitle').textContent = PAGE_TITLES[id] || 'Cacao App';
-  // Scroll to top
-  document.getElementById('appBody').scrollTo(0, 0);
+  if (nav && nav.style.display !== 'none') nav.classList.add('active');
+  const ttl = document.getElementById('topbarTitle');
+  if (ttl) ttl.textContent = PAGE_TITLES[id] || 'IndicatorDATA';
+  const ab = document.getElementById('appBody');
+  if (ab) ab.scrollTo(0, 0);
   // Load data
   if (id === 'sa-home')        { loadSADashboard(); }
   if (id === 'sa-requests')    { loadRequests(currentReqFilter, true); }

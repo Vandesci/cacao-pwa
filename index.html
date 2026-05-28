@@ -512,7 +512,10 @@ code{background:var(--gray100);padding:2px 6px;border-radius:4px;font-size:12px;
       <!-- ── PAGE SUPERADMIN DASHBOARD ── -->
       <div class="page" id="page-sa-home">
         <div class="page-pad">
-          <div style="font-size:20px;font-weight:800;margin-bottom:4px">IndicatorDATA</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <div style="font-size:20px;font-weight:800">IndicatorDATA</div>
+            <button onclick="doLogout()" style="background:var(--r100);color:var(--r600);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer">🚪 Déconnexion</button>
+          </div>
           <div style="font-size:13px;color:var(--gray500);margin-bottom:20px">Panneau Superadministrateur</div>
           <div class="stat-grid">
             <div class="stat-card"><div class="icon ic-amber"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="val" id="sa-pending">-</div><div class="lbl">En attente</div></div>
@@ -844,15 +847,15 @@ code{background:var(--gray100);padding:2px 6px;border-radius:4px;font-size:12px;
     <!-- Admin Coop nav -->
     <button class="nav-btn" id="nav-coop-dashboard" onclick="showPage('coop-dashboard')" style="display:none">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span>Dashboard</span>
+      <span>Accueil</span>
     </button>
     <!-- Inspecteur nav -->
     <button class="nav-btn" id="nav-insp-dashboard" onclick="showPage('insp-dashboard')" style="display:none">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span>Dashboard</span>
+      <span>Accueil</span>
     </button>
-    <!-- Admin/Inspecteur nav -->
-    <button class="nav-btn active" id="nav-home" onclick="showPage('home')">
+    <!-- Nav caché (page home ancienne) -->
+    <button class="nav-btn active" id="nav-home" onclick="showPage('home')" style="display:none">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
       <span>Accueil</span>
     </button>
